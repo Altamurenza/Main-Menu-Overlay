@@ -2,7 +2,7 @@
 Revitalizing the main menu of Bully: Scholarship Edition with a refreshing design and simplifying the process of accessing and loading saved game progress. It supports custom localization files and multi-aspect ratios for diverse monitors.
 
 Requirements:
-- Derpy's Script Loader 7 (Full Version, not S).
+- Derpy's Script Loader 7 or greater (Full Version, not S).
 - Derpy's Script Loader SDK (_derpy_script_loader/extras/sdk).
 - VS 2015.
 
