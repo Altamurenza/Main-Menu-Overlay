@@ -2,6 +2,14 @@
 Revitalizing the main menu of Bully: Scholarship Edition with a refreshing design and simplifying the process of accessing and loading saved game progress. It supports custom localization files and multi-aspect ratios for diverse monitors.
 
 
+Features:
+- New UI Design.
+- New "Load" feature on the main menu.
+- Skip the unnecessary AttractMode.wmv.
+- Custom localization file.
+- Multi-aspect ratio for diverse monitors.
+
+
 Requirements:
 - Derpy's Script Loader 7 or greater (Full Version, not S).
 - Derpy's Script Loader SDK (_derpy_script_loader/extras/sdk).
