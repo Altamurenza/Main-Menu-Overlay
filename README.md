@@ -9,7 +9,7 @@ Requirements:
 
 
 Default Controls:
-KEYBOARD & MOUSE | XBOX CONTROLLER | ASSIGNMENT
+KEYBOARD | XBOX CONTROLLER | ASSIGNMENT
 :--- | :--- | :---
 Enter or L-Shift	| A | Select
 Space | B | Return
