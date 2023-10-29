@@ -13,7 +13,7 @@ ButtonManagement = function()
 					SetSaveLoad(true)
 					DisableController()
 				elseif Title == GetLocalization('CONTINUE') then
-					if IsSaveDataExist(GetSaveLastID()) then
+					if IsSaveDataExist(IsFileTableExist() and GetSaveLastID() or -1) then
 						SetSaveLoad(true)
 					end
 					if not GetSaveLoad() and IsSaveDataExist(GetLastSavedGame()) and SetProxyFiles(true, GetLastSavedGame()) then
@@ -249,6 +249,14 @@ ScreenManagement = function()
 	while true do
 		if type(shared) == 'table' and HasStoryModeBeenSelected() then
 			break
+		end
+		
+		if IsKeyBeingPressed('J') then
+			local R = {pcall(IsFileTableExist)}
+			for I, C in ipairs(R) do
+				R[I] = tostring(C)
+			end
+			print(table.concat(R, ', '))
 		end
 		
 		-- adjust aspect ratio
