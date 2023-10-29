@@ -384,13 +384,12 @@ IsSaveDataExist = function(Index)
 	if not PreCheckArg(Index, 'number') then
 		return
 	end
-	
-	local File = io.open(GetSavePath()..'BullyFile'..Index, 'rb')
-	if File then
-		File:close()
-		return true
+	local Result = Select(2, pcall(IsSaveFileExist, 'BullyFile'..Index))
+	if type(Result) == 'string' then
+		PrintWarning(Result)
 	end
-	return false
+	
+	return type(Result) == 'boolean' and Result or false
 end
 IsSaveDataTableEmpty = function()
 	if type(MainMenu.SaveData) == 'table' and next(MainMenu.SaveData) then
@@ -399,12 +398,12 @@ IsSaveDataTableEmpty = function()
 	return true
 end
 IsFileTableExist = function()
-	local File = io.open(GetSavePath()..'FileTableBully', 'rb')
-	if File then
-		File:close()
-		return true
+	local Result = Select(2, pcall(IsSaveFileExist, 'FileTableBully'))
+	if type(Result) == 'string' then
+		PrintWarning(Result)
 	end
-	return false
+	
+	return type(Result) == 'boolean' and Result or false
 end
 GetLastSavedGame = function(Get)
 	if type(Get) == 'nil' and PreCheckKey('LastSave', 'number') then
@@ -412,7 +411,7 @@ GetLastSavedGame = function(Get)
 	end
 	
 	if type(Get) == 'boolean' and Get then
-		local LastSave = GetSaveLastID() or -1
+		local LastSave = IsFileTableExist() and GetSaveLastID() or -1
 		if LastSave > 0 and IsSaveDataExist(LastSave) then
 			return LastSave
 		end
@@ -452,14 +451,6 @@ GetTimestamp = function(Index)
 		year = 2000 + Table.SaveYear, month = Table.SaveMonth, day = Table.SaveDay,
 		hour = Table.SaveHour, min = Table.SaveMinute, sec = Table.SaveSecond
 	})
-end
-GetSavePath = function()
-	local Path = os.getenv('USERPROFILE')
-	if type(Path) ~= 'string' then
-		Path = (os.getenv('SYSTEMDRIVE') or 'C:')..'\\Users\\'..(os.getenv('USERNAME') or 'User')
-	end
-	
-	return Path..'\\Documents\\Bully Scholarship Edition\\'
 end
 GetSaveName = function(Order)
 	if not PreCheckArg(Order, 'number') then
