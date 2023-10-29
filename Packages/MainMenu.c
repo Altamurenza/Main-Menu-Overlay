@@ -7,19 +7,18 @@ Credit goes to derpy54320 for sharing her knowledges on FileTableBully.
 
 #include <windows.h>
 #include <stdio.h>
+#include <shlobj.h>
 #include <XInput.h>
 #include <dslpackage.h>
 
 #pragma comment(lib, "luacore")
 #pragma comment(lib, "luastd")
 #pragma comment(lib, "XInput")
+#pragma comment(lib, "Shell32")
 #pragma warning(disable: 4996)
 
-#define USER_PATH getenv("USERPROFILE")
-#define SAVE_PATH "\\Documents\\Bully Scholarship Edition\\"
 
-
-// DISPLAY //
+/* DISPLAY */
 
 static int GetRawDisplaySettings(lua_State* L) {
 	HKEY Registry;
@@ -105,7 +104,7 @@ static int GetDisplayModes(lua_State* L) {
 }
 
 
-// INPUT //
+/* INPUT */
 
 const int GamepadButtonID[] = {
 	[0] = XINPUT_GAMEPAD_DPAD_UP,
@@ -151,7 +150,7 @@ static int IsGamepadButtonPressed(lua_State* L) {
 }
 
 
-// SAVEDATA //
+/* SAVEDATA */
 
 struct Outline {
 	int Valid;
@@ -170,11 +169,37 @@ struct Outline {
 	int SaveSecond;
 }Outlines[6];
 
-static int GetSaveDataOutlines(lua_State* L) {
-	char Path[MAX_PATH];
-	sprintf(Path, "%s%s%s", USER_PATH, SAVE_PATH, "FileTableBully");
-	FILE* File = fopen(Path, "rb");
+static int GetSaveFilePath(lua_State* L, HANDLE* Token, PWSTR* User, wchar_t* Path) {
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, Token)) {
+		return 1;
+	}
+	if (SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, *Token, User) != S_OK) {
+		CloseHandle(*Token);
+		return 2;
+	}
 
+	swprintf(Path, MAX_PATH, L"%ls\\Bully Scholarship Edition\\", *User);
+	return 0;
+}
+static void OpenSaveFile(lua_State* L, FILE** File, wchar_t* Name) {
+	HANDLE Token;
+	PWSTR User;
+	wchar_t Path[MAX_PATH];
+
+	int Code = GetSaveFilePath(L, &Token, &User, Path);
+	if (Code != 0) {
+		luaL_error(L, Code == 1 ? "an error occurred while getting access token (%s)" : "an error occurred while getting path to user document (%s)", strerror(errno));
+	}
+	swprintf(Path, MAX_PATH, L"%ls%ls", Path, Name);
+
+	*File = _wfopen(Path, L"rb");
+	CoTaskMemFree(User);
+	CloseHandle(Token);
+}
+
+static int GetSaveDataOutlines(lua_State* L) {
+	FILE* File;
+	OpenSaveFile(L, &File, L"FileTableBully");
 	if (!File) {
 		luaL_error(L, "an error occurred while opening FileTableBully (%s)", strerror(errno));
 		return 0;
@@ -221,10 +246,8 @@ static int GetSaveDataOutlines(lua_State* L) {
 	return 1;
 }
 static int GetSaveLastID(lua_State* L) {
-	char Path[MAX_PATH];
-	sprintf(Path, "%s%s%s", USER_PATH, SAVE_PATH, "FileTableBully");
-	FILE *File = fopen(Path, "rb");
-
+	FILE* File;
+	OpenSaveFile(L, &File, L"FileTableBully");
 	if (!File) {
 		luaL_error(L, "an error occurred while opening FileTableBully (%s)", strerror(errno));
 		return 0;
@@ -244,19 +267,47 @@ static int GetSaveLastID(lua_State* L) {
 	lua_pushnumber(L, (lua_Number)Stat.Index + 1);
 	return 1;
 }
+static int IsSaveFileExist(lua_State* L) {
+	if (lua_type(L, 1) != LUA_TSTRING) {
+		luaL_argerror(L, 1, lua_pushfstring(L, "expected string, got %s", lua_typename(L, lua_type(L, 1))));
+		return 0;
+	}
+
+	const char* NarrStr = lua_tostring(L, 1);
+	wchar_t WideStr[MAX_PATH];
+
+	size_t Length = strlen(NarrStr);
+	mbstowcs(WideStr, NarrStr, Length + 1);
+
+	FILE* File;
+	OpenSaveFile(L, &File, WideStr);
+
+	lua_pushboolean(L, File ? 1 : 0);
+	if (File)
+		fclose(File);
+	return 1;
+}
 static int SetProxyFiles(lua_State* L) {
 	if (lua_type(L, 1) != LUA_TBOOLEAN) {
 		luaL_argerror(L, 1, lua_pushfstring(L, "expected boolean, got %s", lua_typename(L, lua_type(L, 1))));
 		return 0;
 	}
-	char Path[MAX_PATH];
-	sprintf(Path, "%s%s%s", USER_PATH, SAVE_PATH, "BullyFile");
+
+	HANDLE Token;
+	PWSTR User;
+	wchar_t Path[MAX_PATH];
+
+	int Code = GetSaveFilePath(L, &Token, &User, Path);
+	if (Code != 0) {
+		luaL_error(L, Code == 1 ? "an error occurred while getting access token (%s)" : "an error occurred while getting path to user document (%s)", strerror(errno));
+	}
+	swprintf(Path, MAX_PATH, L"%ls%ls", Path, L"BullyFile");
 
 	BOOL Proxied = FALSE;
 	for (int Index = 1; Index <= 6; Index++) {
-		char Name[MAX_PATH];
-		sprintf(Name, "%s%d-tmp", Path, Index);
-		FILE *File = fopen(Name, "rb");
+		wchar_t Name[MAX_PATH];
+		swprintf(Name, MAX_PATH, L"%ls%d-tmp", Path, Index);
+		FILE *File = _wfopen(Name, L"rb");
 
 		if (File) {
 			fclose(File);
@@ -268,39 +319,51 @@ static int SetProxyFiles(lua_State* L) {
 	if (!lua_toboolean(L, 1)) {
 		if (Proxied) {
 			for (int Index = 1; Index <= 6; Index++) {
-				char RealName[MAX_PATH];
-				char FakeName[MAX_PATH];
+				wchar_t RealName[MAX_PATH];
+				wchar_t FakeName[MAX_PATH];
 
-				sprintf(RealName, "%s%d-tmp", Path, Index);
-				sprintf(FakeName, "%s%d", Path, Index);
+				swprintf(RealName, MAX_PATH, L"%ls%d-tmp", Path, Index);
+				swprintf(FakeName, MAX_PATH, L"%ls%d", Path, Index);
 
-				remove(FakeName);
-				FILE *RealFile = fopen(RealName, "rb");
+				DeleteFile(FakeName);
+				FILE *RealFile = _wfopen(RealName, L"rb");
 				if (RealFile) {
 					fclose(RealFile);
-					rename(RealName, FakeName);
+					MoveFile(RealName, FakeName);
 				}
 			}
 		}
+
+		CoTaskMemFree(User);
+		CloseHandle(Token);
+
 		lua_pushboolean(L, 1);
 		return 1;
 	}
 	if (Proxied) {
+		CoTaskMemFree(User);
+		CloseHandle(Token);
+
 		lua_pushboolean(L, 1);
 		return 1;
 	}
 
 	if (lua_type(L, 2) != LUA_TNUMBER) {
+		CoTaskMemFree(User);
+		CloseHandle(Token);
+		
 		luaL_argerror(L, 2, lua_pushfstring(L, "expected number, got %s", lua_typename(L, lua_type(L, 2))));
 		return 0;
 	}
 
 	const int SaveID = (int)lua_tonumber(L, 2);
-	char TargetName[MAX_PATH];
-	sprintf(TargetName, "%s%d", Path, SaveID);
-	FILE *TargetFile = fopen(TargetName, "rb");
+	wchar_t TargetName[MAX_PATH];
+	swprintf(TargetName, MAX_PATH, L"%ls%d", Path, SaveID);
+	
+	FILE *TargetFile = _wfopen(TargetName, L"rb");
 	if (!TargetFile) {
-		luaL_error(L, "an error occurred while opening BullyFile%d (%s)", SaveID, strerror(errno));
+		CoTaskMemFree(User);
+		CloseHandle(Token);
 		return 0;
 	}
 
@@ -312,18 +375,18 @@ static int SetProxyFiles(lua_State* L) {
 
 	fclose(TargetFile);
 	for (int Index = 1; Index <= 6; Index++) {
-		char RealName[MAX_PATH];
-		sprintf(RealName, "%s%d", Path, Index);
+		wchar_t RealName[MAX_PATH];
+		swprintf(RealName, MAX_PATH, L"%ls%d", Path, Index);
 
-		FILE *RealFile = fopen(RealName, "rb");
+		FILE *RealFile = _wfopen(RealName, L"rb");
 		if (RealFile) {
 			fclose(RealFile);
-			char TemporaryName[MAX_PATH];
-			sprintf(TemporaryName, "%s-tmp", RealName);
-			rename(RealName, TemporaryName);
+			wchar_t TemporaryName[MAX_PATH];
+			swprintf(TemporaryName, MAX_PATH, L"%ls-tmp", RealName);
+			MoveFile(RealName, TemporaryName);
 		}
 
-		FILE *FakeFile = fopen(RealName, "wb");
+		FILE *FakeFile = _wfopen(RealName, L"wb");
 		if (FakeFile) {
 			fwrite(TargetData, 1, TargetSize, FakeFile);
 			fclose(FakeFile);
@@ -331,12 +394,15 @@ static int SetProxyFiles(lua_State* L) {
 	}
 	free(TargetData);
 
+	CoTaskMemFree(User);
+	CloseHandle(Token);
+
 	lua_pushboolean(L, 1);
 	return 1;
 }
 
 
-// MISCELLANEOUS //
+/* MISCELLANEOUS */
 
 static int RunCFunction(lua_State* L) {
 	if (lua_type(L, 1) != LUA_TSTRING) {
@@ -357,7 +423,7 @@ static int RunCFunction(lua_State* L) {
 }
 
 
-// EXPORT //
+/* EXPORT */
 
 __declspec(dllexport) int open_mainmenu(lua_State* L) {
 	initDslDll();
@@ -367,6 +433,7 @@ __declspec(dllexport) int open_mainmenu(lua_State* L) {
 	lua_register(L, "IsGamepadButtonPressed", &IsGamepadButtonPressed);
 	lua_register(L, "GetSaveDataOutlines", &GetSaveDataOutlines);
 	lua_register(L, "GetSaveLastID", &GetSaveLastID);
+	lua_register(L, "IsSaveFileExist", &IsSaveFileExist);
 	lua_register(L, "SetProxyFiles", &SetProxyFiles);
 	lua_register(L, "RunCFunction", &RunCFunction);
 
