@@ -13,15 +13,15 @@ ButtonManagement = function()
 					SetSaveLoad(true)
 					DisableController()
 				elseif Title == GetLocalization('CONTINUE') then
-					if IsSaveDataExist(IsFileTableExist() and GetSaveLastID() or -1) then
+					if IsSaveDataAvailable(IsFileTableAvaiable() and GetSaveLastID() or -1) then
 						SetSaveLoad(true)
 					end
-					if not GetSaveLoad() and IsSaveDataExist(GetLastSavedGame()) and SetProxyFiles(true, GetLastSavedGame()) then
+					if not GetSaveLoad() and IsSaveDataAvailable(GetLastSavedGame()) and SetProxyFiles(true, GetLastSavedGame()) then
 						SetSaveLoad(GetLastSavedGame())
 					end
 					if not GetSaveLoad() then
 						for Index = 1, 6 do
-							if IsSaveDataExist(Index) and SetProxyFiles(true, MainMenu.Table[MainMenu.Layer].CID) then
+							if IsSaveDataAvailable(Index) and SetProxyFiles(true, MainMenu.Table[MainMenu.Layer].CID) then
 								SetSaveLoad(Index)
 								break
 							end
@@ -72,7 +72,7 @@ ButtonManagement = function()
 			end
 		elseif GetLayer() == 'Load' then
 			if GetKeyPress('Select') then
-				if IsSaveDataExist(MainMenu.Table[MainMenu.Layer].CID) then
+				if IsSaveDataAvailable(MainMenu.Table[MainMenu.Layer].CID) then
 					if SetProxyFiles(true, MainMenu.Table[MainMenu.Layer].CID) then
 						SetSaveLoad(MainMenu.Table[MainMenu.Layer].CID)
 					else
@@ -167,17 +167,17 @@ end
 -- # VISUAL #
 
 ScreenManagement = function()
-	if GetLastSavedGame(type(shared) == 'table') == -1 or not IsFileTableExist() or IsSaveDataTableEmpty() then
+	if GetLastSavedGame(type(shared) == 'table') == -1 or not IsFileTableAvaiable() or IsSaveDataTableEmpty() then
 		SetLayerIndexTitle('Main', 1, GetLocalization('NEWGAME')) -- FTB doesn't exist and there is no save data
 		SetLayerIndexColor('Main', 2, 100, 100, 100) -- disable "Load" to prevent the game from freezing
 	else
 		-- check the real files, so user can even load the unregistered save data
-		SetSaveDataTable(IsFileTableExist() and GetSaveDataOutlines() or {})
+		SetSaveDataTable(IsFileTableAvaiable() and GetSaveDataOutlines() or {})
 		SetLastSavedGame(GetLastSavedGame(true))
 		local Found = false
 		for Index = 1, 6 do
 			SetLayerIndexTitle('Load', Index, GetSaveName(Index))
-			if not IsSaveDataExist(Index) then
+			if not IsSaveDataAvailable(Index) then
 				SetLayerIndexColor('Load', Index, 100, 100, 100)
 			else
 				SetLayerIndexColor('Load', Index, 255, 255, 255)
@@ -249,14 +249,6 @@ ScreenManagement = function()
 	while true do
 		if type(shared) == 'table' and HasStoryModeBeenSelected() then
 			break
-		end
-		
-		if IsKeyBeingPressed('J') then
-			local R = {pcall(IsFileTableExist)}
-			for I, C in ipairs(R) do
-				R[I] = tostring(C)
-			end
-			print(table.concat(R, ', '))
 		end
 		
 		-- adjust aspect ratio
