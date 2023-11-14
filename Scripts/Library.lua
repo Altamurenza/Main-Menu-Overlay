@@ -130,6 +130,9 @@ end
 
 -- # INPUT FUNCTIONS #
 
+GetScriptPath = function()
+	return GetScriptFilePath()..(gDerpyScriptLoader < 8 and GetScriptCollection() or '')
+end
 GetKeyValue = function(File)
 	if not PreCheckHandler(File) then
 		return
@@ -155,7 +158,7 @@ GetLocalization = function(Key)
 	if type(Key) == 'nil' then
 		local Lang = GetPreference('Localization')
 		
-		local Path = GetScriptFilePath()..GetScriptCollection()..'/Translations/'..Lang..'.txt'
+		local Path = GetScriptPath()..'/Translations/'..Lang..'.txt'
 		local File = io.open(Path, 'rb')
 		if File then
 			local Table = GetKeyValue(File)
@@ -165,7 +168,7 @@ GetLocalization = function(Key)
 		
 		PrintWarning('missing localization file: "'..Path..'"')
 		
-		Path = GetScriptFilePath()..GetScriptCollection()..'/Translations/English.txt'
+		Path = GetScriptPath()..'/Translations/English.txt'
 		File = assert(io.open(Path, 'rb'), 'missing localization file: "'..Path..'"')
 		local Table = GetKeyValue(File)
 		File:close()
@@ -198,7 +201,7 @@ GetPreference = function(Key)
 			SettingSpacing = {Type = 'number', Default = 0.02},
 		}
 		
-		local Path = GetScriptFilePath()..GetScriptCollection()..'/Preferences.ini'
+		local Path = GetScriptPath()..'/Preferences.ini'
 		local File = io.open(Path, 'rb')
 		if File then
 			local Table = GetKeyValue(File)
@@ -270,8 +273,8 @@ GetKeyPress = function(Key)
 			if Input[Index] and (Index > 1 and Input[Index] ~= Input[1] or true) then
 				--[[
 					possibly bugs from DSL:
-					1. IsKeyBeingPressed(Key, Controller) is behaving like IsKeyPressed, but IsKeyBeingPressed(Key) is functioning as expected
-					2. IsKeyBeingReleased(Key, Controller) doesn't work
+					1. IsKeyBeingPressed(Key, 0) is behaving like IsKeyPressed, but IsKeyBeingPressed(Key) is functioning as expected
+					2. IsKeyBeingReleased(Key, 0) doesn't work
 				]]
 				
 				if type(Input[Index]) == 'string' and IsKeyBeingPressed(Input[Index]) then
@@ -318,10 +321,11 @@ SetKeyPress = function(Key)
 		return
 	end
 	
+	-- prevent the "slipping button" issue by setting the other buttons to 0
 	for Index = 0, 24 do
-		SetStickValue(Index == Key and Key or Index, 0, Index == Key and 1 or 0)
+		SetStickValue(Index == Key and Key or Index, 0, Index == Key and 1 or 0) -- this doesn't work for joystick ??
 		if GetNavigationInput('Joystick') then
-			-- possibly another inconsistency from the game: the main joystick has controller index 1 instead of 0.
+			-- it just works by pressing the keyboard input (controller index 1 instead of 0)
 			SetStickValue(Index == Key and Key or Index, 1, Index == Key and 1 or 0)
 		end
 	end
@@ -334,15 +338,6 @@ SetNavigationInput = function(Table)
 	MainMenu.Input = Table
 end
 DisableController = function()
-	--[[
-		patch for inconsistency, but what inconsistency?
-		
-		while we're using joystick, the primary controller index to use SetStickValue is 1.
-		meanwhile, the primary controller index to use ZeroController is 0.
-		
-		so, ZeroController(1) means disable the keyboard input and SetStickValue(Key, 1, 1) means press a joystick button.
-	]]
-	
 	if GetNavigationInput('Joystick') then
 		ZeroController(1)
 	end
@@ -380,11 +375,11 @@ end
 
 -- # SAVEDATA FUNCTIONS #
 
-IsSaveDataExist = function(Index)
+IsSaveDataAvailable = function(Index)
 	if not PreCheckArg(Index, 'number') then
 		return
 	end
-	local Result = Select(2, pcall(IsSaveFileExist, 'BullyFile'..Index))
+	local Result = Select(2, pcall(IsSaveFileAvailable, 'BullyFile'..Index))
 	if type(Result) == 'string' then
 		PrintWarning(Result)
 	end
@@ -397,8 +392,8 @@ IsSaveDataTableEmpty = function()
 	end
 	return true
 end
-IsFileTableExist = function()
-	local Result = Select(2, pcall(IsSaveFileExist, 'FileTableBully'))
+IsFileTableAvaiable = function()
+	local Result = Select(2, pcall(IsSaveFileAvailable, 'FileTableBully'))
 	if type(Result) == 'string' then
 		PrintWarning(Result)
 	end
@@ -411,8 +406,8 @@ GetLastSavedGame = function(Get)
 	end
 	
 	if type(Get) == 'boolean' and Get then
-		local LastSave = IsFileTableExist() and GetSaveLastID() or -1
-		if LastSave > 0 and IsSaveDataExist(LastSave) then
+		local LastSave = IsFileTableAvaiable() and GetSaveLastID() or -1
+		if LastSave > 0 and IsSaveDataAvailable(LastSave) then
 			return LastSave
 		end
 		
@@ -457,7 +452,7 @@ GetSaveName = function(Order)
 		return
 	end
 	
-	if not IsSaveDataExist(Order) then
+	if not IsSaveDataAvailable(Order) then
 		return {GetLocalization('NA'), '', ''}
 	end
 	local Table = GetSaveDataTable(Order)
@@ -812,7 +807,7 @@ MainMenu = GetPersistentDataTable()
 
 if not next(MainMenu) then
 	MainMenu.Settings = GetPreference()
-	MainMenu.SaveData = IsFileTableExist() and GetSaveDataOutlines() or {}
+	MainMenu.SaveData = IsFileTableAvaiable() and GetSaveDataOutlines() or {}
 	MainMenu.LastSave = GetLastSavedGame(true)
 	MainMenu.LoadSave = nil
 	MainMenu.KeyTimer = GetSystemTimer()
