@@ -1,10 +1,13 @@
-NEWGAME=New Game
+STORY=Story
 CONTINUE=Continue
+NEWGAME=New Game
 LOAD=Load
+MULTIPLAYER=Multiplayer
 CHAPTER=Chapter
 SUMMER=Endless Summer
 NA=Not Available
 UNKNOWN=Unknown
+UNREGISTERED=Unregistered
 SETTINGS=Settings
 RESOLUTION=Resolution
 ANTIALIASING=Anti Aliasing
@@ -70,6 +73,8 @@ AREA_62=BMX Park
 
 MISSION_1=Help Petey
 MISSION_4=Welcome to Bullworth
+MISSION_5=Welcome to Bullworth
+MISSION_6=Welcome to Bullworth
 MISSION_8=This Is Your School
 MISSION_9=Get to Class
 MISSION_10=The Setup
