@@ -7,7 +7,7 @@
 RequireSystemAccess()
 RequireLoaderVersion(7)
 
-loadlib(GetPackageFilePath('MainMenu.dll'), 'open_mainmenu')()
+loadlib(GetPackageFilePath('MainMenu.dll'), 'MainMenu')()
 
 
 -- # DISPLAY FUNCTIONS #
@@ -23,8 +23,7 @@ IsNativeOption = function(Option)
 		return
 	end
 	return ({
-		[GetLocalization('NEWGAME')] = true,
-		[GetLocalization('CONTINUE')] = true,
+		[GetLocalization('STORY')] = true,
 		[GetLocalization('SETTINGS')] = true,
 		[GetLocalization('EXIT')] = true,
 	})[Option] or false
@@ -38,6 +37,30 @@ GetLayer = function()
 		return
 	end
 	return MainMenu.Layer
+end
+GetLayerTable = function(Layer)
+	if not PreCheckArg(MainMenu.Table[Layer], 'table', 1, 'invalid layer') then
+		return
+	end
+	return MainMenu.Table[Layer]
+end
+GetLayerCID = function(Layer)
+	if not PreCheckArg(MainMenu.Table[Layer], 'table', 1, 'invalid layer') then
+		return
+	end
+	return MainMenu.Table[Layer].CID
+end
+GetLayerLID = function(Layer)
+	if not PreCheckArg(MainMenu.Table[Layer], 'table', 1, 'invalid layer') then
+		return
+	end
+	return MainMenu.Table[Layer].LID
+end
+GetLayerSize = function(Layer)
+	if not PreCheckArg(MainMenu.Table[Layer], 'table', 1, 'invalid layer') then
+		return
+	end
+	return table.getn(MainMenu.Table[Layer])
 end
 GetLayerIndexValue = function(Layer, Index, Key)
 	if not PreCheckArgs({
@@ -67,17 +90,47 @@ GetLastResolution = function()
 	end
 	return MainMenu.Resolution[1], MainMenu.Resolution[2]
 end
+SetConfigure = function(Configure)
+	if not PreCheckArg(Configure, 'boolean') then
+		return
+	end
+	MainMenu.IsAdjust = Configure
+end
 SetLayer = function(Layer)
 	if not PreCheckArg(Layer, 'string') then
 		return
 	end
 	MainMenu.Layer = Layer
 end
-SetConfigure = function(Configure)
-	if not PreCheckArg(Configure, 'boolean') then
+SetLayerCID = function(Layer, Value, Adjust)
+	if not PreCheckArg(MainMenu.Table[Layer], 'table', 1, 'invalid layer') then
 		return
 	end
-	MainMenu.IsAdjust = Configure
+	
+	if type(Value) == 'number' then
+		MainMenu.Table[Layer].LID = MainMenu.Table[Layer].CID
+		MainMenu.Table[Layer].CID = Value
+		return
+	end
+	if type(Adjust) == 'boolean' then
+		if Layer == 'Load' and IsSaveDataTableEmpty() then -- avoid to freeze the game since there's no available save
+			return
+		end
+		MainMenu.Table[Layer].LID = MainMenu.Table[Layer].CID
+		local Size = GetLayerSize(Layer)
+		
+		if Adjust then
+			MainMenu.Table[Layer].CID = MainMenu.Table[Layer].CID + 1 > Size and 1 or MainMenu.Table[Layer].CID + 1
+			while not IsLayerIndexAvailable(Layer, MainMenu.Table[Layer].CID) do
+				MainMenu.Table[Layer].CID = MainMenu.Table[Layer].CID + 1 > Size and 1 or MainMenu.Table[Layer].CID + 1
+			end
+		else
+			MainMenu.Table[Layer].CID = MainMenu.Table[Layer].CID - 1 < 1 and Size or MainMenu.Table[Layer].CID - 1
+			while not IsLayerIndexAvailable(Layer, MainMenu.Table[Layer].CID) do
+				MainMenu.Table[Layer].CID = MainMenu.Table[Layer].CID - 1 < 1 and Size or MainMenu.Table[Layer].CID - 1
+			end
+		end
+	end
 end
 SetLayerIndexColor = function(Layer, Index, Red, Green, Blue)
 	if not PreCheckArgs({
@@ -183,22 +236,14 @@ GetPreference = function(Key)
 	
 	if type(Key) == 'nil' then
 		local Test = {
-			UseDefaultLanguage = {Type = 'boolean', Default = false},
 			Localization = {Type = 'string', Default = 'English'},
 			ShowImage = {Type = 'number', Default = 0},
 			Font1 = {Type = 'string', Default = 'Georgia'},
 			Font2 = {Type = 'string', Default = 'Century'},
-			MainMidScale = {Type = 'number', Default = 1.3},
-			MainBotScale = {Type = 'number', Default = 1.2},
-			LoadTopScale = {Type = 'number', Default = 2.5},
-			LoadMidScale = {Type = 'number', Default = 1.3},
-			LoadBotScale = {Type = 'number', Default = 1.2},
-			SettingTopScale = {Type = 'number', Default = 2.5},
-			SettingMidScale = {Type = 'number', Default = 1.3},
-			SettingBotScale = {Type = 'number', Default = 1.2},
-			MainSpacing = {Type = 'number', Default = 0.02},
-			LoadSpacing = {Type = 'number', Default = 0.01},
-			SettingSpacing = {Type = 'number', Default = 0.02},
+			MenuTopScale = {Type = 'number', Default = 2.5},
+			MenuMidScale = {Type = 'number', Default = 1.2},
+			MenuBotScale = {Type = 'number', Default = 1.1},
+			MenuSpacing = {Type = 'number', Default = 0.02},
 		}
 		
 		local Path = GetScriptPath()..'/Preferences.ini'
@@ -234,7 +279,7 @@ IsJoystickButtonPressed = function(Button, Controller)
 		return
 	end
 	
-	local Result = Joystick[Controller].Pressed[Button]
+	local Result = GetJoystickValue(Controller, Button, 'Pressed')
 	if type(Result) == 'nil' then
 		return false
 	end
@@ -245,7 +290,7 @@ IsJoystickButtonBeingPressed = function(Button, Controller)
 		return
 	end
 	
-	local Result = Joystick[Controller].BeingPressed[Button]
+	local Result = GetJoystickValue(Controller, Button, 'BeingPressed')
 	if type(Result) == 'nil' then
 		return false
 	end
@@ -256,7 +301,7 @@ IsJoystickButtonBeingReleased = function(Button, Controller)
 		return
 	end
 	
-	local Result = Joystick[Controller].BeingReleased[Button]
+	local Result = GetJoystickValue(Controller, Button, 'BeingReleased')
 	if type(Result) == 'nil' then
 		return false
 	end
@@ -310,11 +355,22 @@ GetNavigationInput = function(Key)
 			local Type, Code = GetInputHardware(Table.Index, 0)
 			Type = string.upper(Type)
 			
-			Result[String] = {Result.Joystick and Code or ((Input[Type] and Input[Type][Code]) and Input[Type][Code] or false), unpack(Table.Codes)}
+			Result[String] = {
+				Result.Joystick and Code or ((Input[Type] and Input[Type][Code]) and Input[Type][Code] or false), 
+				unpack(Table.Codes)
+			}
 		end
 		return Result
 	end
 	return
+end
+GetJoystickValue = function(Controller, Button, Key)
+	if not PreCheckArgs({
+		{Controller, 'number'}, {Button, 'number'}, 
+		{Joystick[Controller][Key], 'table', 'invalid key'}
+	}) then return end
+	
+	return Joystick[Controller][Key][Button]
 end
 SetKeyPress = function(Key)
 	if not PreCheckArg(Key, 'number') then
@@ -323,9 +379,8 @@ SetKeyPress = function(Key)
 	
 	-- prevent the "slipping button" issue by setting the other buttons to 0
 	for Index = 0, 24 do
-		SetStickValue(Index == Key and Key or Index, 0, Index == Key and 1 or 0) -- this doesn't work for joystick ??
+		SetStickValue(Index == Key and Key or Index, 0, Index == Key and 1 or 0)
 		if GetNavigationInput('Joystick') then
-			-- it just works by pressing the keyboard input (controller index 1 instead of 0)
 			SetStickValue(Index == Key and Key or Index, 1, Index == Key and 1 or 0)
 		end
 	end
@@ -337,36 +392,38 @@ SetNavigationInput = function(Table)
 	end
 	MainMenu.Input = Table
 end
+SetJoystickValue = function(Controller, Button, Pressed, BeingPressed, BeingReleased)
+	if not PreCheckArgs({
+		{Controller, 'number'}, {Button, 'number'}, {Pressed, 'boolean'}, 
+		{BeingPressed, 'boolean'}, {BeingReleased, 'boolean'}
+	}) then return end
+	
+	Joystick[Controller].Pressed[Button] = Pressed
+	Joystick[Controller].BeingPressed[Button] = BeingPressed
+	Joystick[Controller].BeingReleased[Button] = BeingReleased
+end
 DisableController = function()
 	if GetNavigationInput('Joystick') then
 		ZeroController(1)
 	end
 	ZeroController(0)
 end
-JoystickListener = function()
-	while true do
+JoystickListener = function(Controller)
+	while not HasStoryModeBeenSelected() do
 		Wait(0)
 		
-		for Controller = 0, 3 do
-			for Button = 0, 15 do
-				if Joystick[Controller].BeingPressed[Button] then
-					Joystick[Controller].BeingPressed[Button] = false
-				end
-				if Joystick[Controller].BeingReleased[Button] then
-					Joystick[Controller].BeingReleased[Button] = false
-				end
-				
-				if IsGamepadButtonPressed(Button, Controller) then
-					if not Joystick[Controller].Pressed[Button] then
-						Joystick[Controller].BeingPressed[Button] = true
-						Joystick[Controller].Pressed[Button] = true
-					end
-				else
-					if Joystick[Controller].Pressed[Button] then
-						Joystick[Controller].BeingReleased[Button] = true
-						Joystick[Controller].Pressed[Button] = false
-					end
-				end
+		for Button = 0, 15 do
+			local IsPressed = IsGamepadButtonPressed(Button, Controller)
+			local WasPressed = Joystick[Controller].Pressed[Button]
+			
+			if IsPressed and not WasPressed then
+				SetJoystickValue(Controller, Button, true, true, false)
+			elseif IsPressed and WasPressed then
+				SetJoystickValue(Controller, Button, false, true, false)
+			elseif not IsPressed and WasPressed then
+				SetJoystickValue(Controller, Button, false, false, true)
+			else
+				SetJoystickValue(Controller, Button, false, false, false)
 			end
 		end
 	end
@@ -379,12 +436,7 @@ IsSaveDataAvailable = function(Index)
 	if not PreCheckArg(Index, 'number') then
 		return
 	end
-	local Result = Select(2, pcall(IsSaveFileAvailable, 'BullyFile'..Index))
-	if type(Result) == 'string' then
-		PrintWarning(Result)
-	end
-	
-	return type(Result) == 'boolean' and Result or false
+	return IsSaveFileAvailable('BullyFile'..Index)
 end
 IsSaveDataTableEmpty = function()
 	if type(MainMenu.SaveData) == 'table' and next(MainMenu.SaveData) then
@@ -392,13 +444,18 @@ IsSaveDataTableEmpty = function()
 	end
 	return true
 end
+IsSavingGame = function()
+	-- require system thread or drawing thread
+	return IsGamePaused() and PedMePlaying(gPlayer, 'AnimSave')
+end
 IsFileTableAvaiable = function()
-	local Result = Select(2, pcall(IsSaveFileAvailable, 'FileTableBully'))
-	if type(Result) == 'string' then
-		PrintWarning(Result)
+	return IsSaveFileAvailable('FileTableBully')
+end
+IsForceReset = function()
+	if not PreCheckKey('ForceReset', 'boolean') then
+		return
 	end
-	
-	return type(Result) == 'boolean' and Result or false
+	return MainMenu.ForceReset
 end
 GetLastSavedGame = function(Get)
 	if type(Get) == 'nil' and PreCheckKey('LastSave', 'number') then
@@ -453,11 +510,11 @@ GetSaveName = function(Order)
 	end
 	
 	if not IsSaveDataAvailable(Order) then
-		return {GetLocalization('NA'), '', ''}
+		return {GetLocalization('NA'), '-', '-'}
 	end
 	local Table = GetSaveDataTable(Order)
 	if type(Table) ~= 'table' then
-		return {GetLocalization('UNKNOWN'), GetLocalization('UNKNOWN'), '0%'}
+		return {GetLocalization('UNREGISTERED'), '-', '-'}
 	end
 	return {
 		(Table.LastChapter + 1 >= 6 and GetLocalization('SUMMER') or GetLocalization('CHAPTER')..' '..(Table.LastChapter + 1))..' : '..GetLocalization('AREA_'..Table.LastArea),
@@ -481,8 +538,7 @@ SetSaveLoad = function(Order)
 		end
 		MainMenu.Table['Main'].LID = 1
 		MainMenu.Table['Main'].CID = 1
-		MainMenu.ForceEntry = false
-		MainMenu.ForceCount = 0
+		MainMenu.ForceEntry = 0
 		SetLayer('Main')
 		collectgarbage()
 	end
@@ -497,6 +553,16 @@ SetSaveDataTable = function(Table)
 		return
 	end
 	MainMenu.SaveData = Table
+end
+SetForceReset = function(Reset)
+	if not PreCheckArg(Reset, 'boolean') then
+		return
+	end
+	
+	MainMenu.ForceReset = Reset
+	if not Reset then
+		RunCFunction('0x5D53A0')
+	end
 end
 
 
@@ -515,14 +581,14 @@ GetSettingTable = function(Index)
 	return MainMenu.Table['Settings'][Index].List
 end
 GetDisplaySettings = function()
-	local Settings, Message = GetRawDisplaySettings()
+	local Settings, Message = GetDisplayValues()
 	if type(Message) == 'string' then
 		PrintWarning(Message)
 		return
 	end
 	for Index, Value in ipairs(Settings) do
 		if Value == -1 then
-			PrintWarning("non-DWORD value: 'Settings > "..GetLayerIndexValue('Settings', Index > 1 and Index - 1 or Index, 'Text').."'")
+			PrintWarning("unable to get raw value for 'Settings > "..GetLayerIndexValue('Settings', Index > 1 and Index - 1 or Index, 'Text').."'")
 			return
 		end
 	end
@@ -540,13 +606,24 @@ GetDisplaySettings = function()
 	table.insert(Output, Settings[5] + 1)
 	return Output
 end
-SetSettingOption = function(Index, Option)
-	if not PreCheckArgs({
-		{MainMenu.Table['Settings'][Index], 'table', 'invalid index'},
-		{Option, 'number'},
-	}) then return end
-	MainMenu.Table['Settings'][Index].BackOpt = Option
-	MainMenu.Table['Settings'][Index].CurrOpt = Option
+SetSettingOption = function(Index, Value, Adjust)
+	if not PreCheckArg(MainMenu.Table['Settings'][Index], 'table', 1, 'invalid index') then
+		return
+	end
+	
+	if type(Value) == 'number' then
+		MainMenu.Table['Settings'][Index].BackOpt = Value
+		MainMenu.Table['Settings'][Index].CurrOpt = Value
+		return
+	end
+	if type(Adjust) == 'boolean' then
+		local Current = MainMenu.Table['Settings'][Index].CurrOpt
+		if Adjust then
+			MainMenu.Table['Settings'][Index].CurrOpt = Current + 1 > table.getn(GetSettingTable(Index)) and 1 or Current + 1
+		else
+			MainMenu.Table['Settings'][Index].CurrOpt = Current - 1 < 1 and table.getn(GetSettingTable(Index)) or Current - 1
+		end
+	end
 end
 SetSettingTable = function(Index, Table)
 	if not PreCheckArgs({
@@ -559,6 +636,16 @@ end
 
 -- # MISCELLANEOUS FUNCTIONS #
 
+StartGame = function(Reset)
+	if not PreCheckArg(Reset, 'boolean') then
+		return
+	end
+	
+	if MainMenu.ForceEntry < (Reset and 10 or 1) then
+		(math.mod(MainMenu.ForceEntry, 2) == 0 and SetStickValue or DisableController)(7, 0, 1)
+		MainMenu.ForceEntry = MainMenu.ForceEntry + 1
+	end
+end
 CreateInputTexture = function(Key)
 	if not PreCheckArg(Key, 'string') then
 		return
@@ -662,12 +749,6 @@ Select = function(...)
 	end
 	
 	return
-end
-SoundEffect2D = function(Sound)
-	if not PreCheckArg(Sound, 'string') or string.len(Sound) == 0 then
-		return
-	end
-	RunCFunction('0x5D3E60', Sound)
 end
 
 
@@ -814,8 +895,8 @@ if not next(MainMenu) then
 	MainMenu.IsAdjust = false
 	MainMenu.TextMenu = GetLocalization()
 	
-	MainMenu.ForceEntry = false
-	MainMenu.ForceCount = 0
+	MainMenu.ForceReset = false
+	MainMenu.ForceEntry = 0
 	
 	MainMenu.AspectRatio = GetDisplayAspectRatio()
 	MainMenu.Resolution = {GetDisplayResolution()}
@@ -826,13 +907,20 @@ if not next(MainMenu) then
 		['Main'] = {
 			LID = 1,
 			CID = 1,
-			{Text = GetLocalization('CONTINUE'), R = 255, G = 255, B = 255},
-			{Text = GetLocalization('LOAD'), R = 255, G = 255, B = 255},
+			{Text = GetLocalization('STORY'), R = 255, G = 255, B = 255},
 			{Text = GetLocalization('SETTINGS'), R = 255, G = 255, B = 255},
 			{Text = GetLocalization('EXIT'), R = 255, G = 255, B = 255},
 		},
+		['Story'] = {
+			LID = 1,
+			CID = GetLastSavedGame() == -1 and 2 or 1,
+			{Text = GetLocalization('CONTINUE'), R = 255, G = 255, B = 255},
+			{Text = GetLocalization('NEWGAME'), R = 255, G = 255, B = 255},
+			{Text = GetLocalization('LOAD'), R = 255, G = 255, B = 255},
+		},
 		['Load'] = {
-			CID = MainMenu.LastSave == -1 and 1 or MainMenu.LastSave,
+			LID = 1,
+			CID = GetLastSavedGame() == -1 and 1 or MainMenu.LastSave,
 			{Text = GetSaveName(1), R = 255, G = 255, B = 255},
 			{Text = GetSaveName(2), R = 255, G = 255, B = 255},
 			{Text = GetSaveName(3), R = 255, G = 255, B = 255},
@@ -841,11 +929,12 @@ if not next(MainMenu) then
 			{Text = GetSaveName(6), R = 255, G = 255, B = 255},
 		},
 		['Settings'] = {
+			LID = 1,
 			CID = 1,
-			{Text = GetLocalization('RESOLUTION'), BackOpt = 1, CurrOpt = 1, List = {}},
-			{Text = GetLocalization('ANTIALIASING'), BackOpt = 1, CurrOpt = 1, List = {'1x MSAA', '2x MSAA', '4x MSAA', '8x MSAA'}},
-			{Text = GetLocalization('VSYNC'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('ON')}},
-			{Text = GetLocalization('SHADOWS'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('LOW'), GetLocalization('MEDIUM'), GetLocalization('HIGH')}},
+			{Text = GetLocalization('RESOLUTION'), BackOpt = 1, CurrOpt = 1, List = {}, R = 255, G = 255, B = 255},
+			{Text = GetLocalization('ANTIALIASING'), BackOpt = 1, CurrOpt = 1, List = {'1x MSAA', '2x MSAA', '4x MSAA', '8x MSAA'}, R = 255, G = 255, B = 255},
+			{Text = GetLocalization('VSYNC'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('ON')}, R = 255, G = 255, B = 255},
+			{Text = GetLocalization('SHADOWS'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('LOW'), GetLocalization('MEDIUM'), GetLocalization('HIGH')}, R = 255, G = 255, B = 255},
 		},
 	}
 end
