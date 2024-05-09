@@ -428,9 +428,7 @@ ScreenManagement = function()
 		if type(shared) == 'table' and HasStoryModeBeenSelected() then
 			break
 		end
-		if IsKeyBeingPressed('T') then
-			CaptureScreen('_MMO.png')
-		end
+		
 		-- update TAR and Layout when the resolution has changed
 		if table.concat({GetLastResolution()}) ~= table.concat({GetDisplayResolution()}) then
 			UpdateMenuComponent(TUD, TAR, Layout)
