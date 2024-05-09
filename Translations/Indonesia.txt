@@ -1,10 +1,13 @@
+STORY=Cerita
 NEWGAME=Permainan Baru
 CONTINUE=Lanjutkan
 LOAD=Muat
+MULTIPLAYER=Multipemain
 CHAPTER=Bab
 SUMMER=Musim Panas
 NA=Tidak Tersedia
 UNKNOWN=Tidak Diketahui
+UNREGISTERED=Belum Terdaftar
 SETTINGS=Pengaturan
 RESOLUTION=Resolusi
 ANTIALIASING=Penghalusan Objek
@@ -70,6 +73,8 @@ AREA_62=Arena BMX
 
 MISSION_1=Bantu Peter
 MISSION_4=Selamat Datang di Bullworth
+MISSION_5=Selamat Datang di Bullworth
+MISSION_6=Selamat Datang di Bullworth
 MISSION_8=Ini Sekolahmu
 MISSION_9=Pergi ke Kelas
 MISSION_10=Persiapan
