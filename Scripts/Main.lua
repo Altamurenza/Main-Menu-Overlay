@@ -27,14 +27,23 @@ CallScript = nil
 
 -- # START #
 
+HookFunction('SystemAllowMissionManagerToForceRunMissions', function()
+	if IsForceReset() then
+		SetForceReset(false)
+	end
+end)
+
 CreateDrawingThread(function()
 	while true do
 		if GetSaveLoad() then
 			SetSaveLoad(nil)
 		end
-		
 		if type(shared) == 'table' and not HasStoryModeBeenSelected() then
 			ScreenManagement()
+		end
+		
+		if IsForceReset() then
+			DrawRectangle(0, 0, 1, 1, 0, 0, 0)
 		end
 		Wait(0)
 	end
