@@ -6,13 +6,91 @@
 
 ButtonManagement = function()
 	if not IsConsoleActive() and not GetSaveLoad() then
-		if GetLayer() == 'Main' then
-			if GetKeyPress('Select') then
-				local Title = GetLayerIndexValue('Main', MainMenu.Table[MainMenu.Layer].CID, 'Text')
-				if Title == GetLocalization('NEWGAME')then
-					SetSaveLoad(true)
+		local Layer = GetLayer()
+		
+		if GetKeyPress('Up') then
+			SetLayerCID(Layer, nil, false)
+			if Layer == 'Main' then
+				local IsLNative = IsNativeOption(GetLayerIndexValue(Layer, GetLayerLID(Layer), 'Text'))
+				local IsCNative = IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text'))
+				if (not IsLNative and IsCNative) or (not IsLNative and not IsCNative) then
+					RunCFunction('0x5D3E60', 'NavUp')
 					DisableController()
-				elseif Title == GetLocalization('CONTINUE') then
+				else
+					SetKeyPress(0)
+				end
+			elseif Layer == 'Story' or Layer == 'Load'then
+				RunCFunction('0x5D3E60', 'NavUp')
+				DisableController()
+			elseif Layer == 'Settings' and not IsConfiguring() then
+				SetKeyPress(1) -- 1 is prev in the Settings menu
+			else
+				DisableController()
+			end
+		elseif GetKeyPress('Down') then
+			SetLayerCID(Layer, nil, true)
+			if Layer == 'Main' then
+				if not IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')) then
+					RunCFunction('0x5D3E60', 'NavDwn')
+					DisableController()
+				else
+					SetKeyPress(1)
+				end
+			elseif Layer == 'Story' or Layer == 'Load' then
+				RunCFunction('0x5D3E60', 'NavDwn')
+				DisableController()
+			elseif Layer == 'Settings' and not IsConfiguring() then
+				SetKeyPress(0) -- 0 is next in the Settings menu
+			else
+				DisableController()
+			end
+		elseif GetKeyPress('Left') then
+			if Layer == 'Settings' and IsConfiguring() then
+				SetSettingOption(GetLayerCID(Layer), nil, false)
+				SetKeyPress(0)
+			else
+				DisableController()
+			end
+		elseif GetKeyPress('Right') then
+			if Layer == 'Settings' and IsConfiguring() then
+				SetSettingOption(GetLayerCID(Layer), nil, true)
+				SetKeyPress(1)
+			else
+				DisableController()
+			end
+		elseif GetKeyPress('Return') then
+			if Layer == 'Story' then
+				SetLayer('Main')
+				RunCFunction('0x5D3E60', 'ButtonDwn')
+				DisableController()
+			elseif Layer == 'Settings' and IsConfiguring() then
+				local CID = GetLayerCID(Layer)
+				SetSettingOption(CID, GetSettingOption(CID))
+				SetConfigure(false)
+				SetKeyPress(8)
+			elseif Layer == 'Load' or (Layer == 'Settings' and not IsConfiguring()) then
+				SetLayerCID(Layer, Layer == 'Load' and GetLayerCID(Layer) or 1)
+				SetLayer(Layer == 'Load' and 'Story' or 'Main')
+				local Function = Layer == 'Load' and DisableController or SetKeyPress
+				Function(8)
+			else
+				DisableController()
+			end
+		elseif GetKeyPress('Select') then
+			if Layer == 'Main' then
+				local Title = GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')
+				if Title == GetLocalization('STORY') or Title == GetLocalization('SETTINGS') or Title == GetLocalization('EXIT') then
+					local Function = Title == GetLocalization('EXIT') and QuitGame or SetLayer
+					Function(Title == GetLocalization('STORY') and 'Story' or 'Settings')
+					RunCFunction('0x5D3E60', 'ButtonUp')
+					Function = Title == GetLocalization('STORY') and DisableController or SetKeyPress
+					Function(7)
+				else
+					DisableController()
+				end
+			elseif Layer == 'Story' then
+				local Title = GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')
+				if Title == GetLocalization('CONTINUE') then
 					if IsSaveDataAvailable(IsFileTableAvaiable() and GetSaveLastID() or -1) then
 						SetSaveLoad(true)
 					end
@@ -21,140 +99,59 @@ ButtonManagement = function()
 					end
 					if not GetSaveLoad() then
 						for Index = 1, 6 do
-							if IsSaveDataAvailable(Index) and SetProxyFiles(true, MainMenu.Table[MainMenu.Layer].CID) then
+							if IsSaveDataAvailable(Index) and SetProxyFiles(true, GetLayerCID(Layer)) then
 								SetSaveLoad(Index)
 								break
 							end
 						end
 					end
 					if not GetSaveLoad() then
-						PrintOutput('starting a new game..')
+						PrintWarning("FORCE BOOT! unable to load any savedata")
 						SetSaveLoad(true)
 					end
+					RunCFunction('0x5D3E60', 'ButtonUp')
+					DisableController()
+				elseif Title == GetLocalization('NEWGAME')then
+					SetForceReset(true)
+					SetSaveLoad(true)
+					RunCFunction('0x5D3E60', 'ButtonUp')
 					DisableController()
 				elseif Title == GetLocalization('LOAD') then
 					SetLayer('Load')
-					DisableController()
-				elseif Title == GetLocalization('SETTINGS') then
-					SetLayer('Settings')
-					SetKeyPress(7)
-				elseif Title == GetLocalization('EXIT') then
-					QuitGame()
-				else
-					DisableController()
-				end
-			elseif GetKeyPress('Up') then
-				MainMenu.Table[MainMenu.Layer].LID = MainMenu.Table[MainMenu.Layer].CID
-				MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer]) or MainMenu.Table[MainMenu.Layer].CID - 1
-				while not IsLayerIndexAvailable(MainMenu.Layer, MainMenu.Table[MainMenu.Layer].CID) do
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer]) or MainMenu.Table[MainMenu.Layer].CID - 1
-				end
-				if not IsNativeOption(GetLayerIndexValue('Main', MainMenu.Table[MainMenu.Layer].LID, 'Text')) and IsNativeOption(GetLayerIndexValue('Main', MainMenu.Table[MainMenu.Layer].CID, 'Text')) then
-					SoundEffect2D('NavDwn')
+					RunCFunction('0x5D3E60', 'ButtonUp')
 					DisableController()
 				else
-					SetKeyPress(0)
-				end
-			elseif GetKeyPress('Down') then
-				MainMenu.Table[MainMenu.Layer].LID = MainMenu.Table[MainMenu.Layer].CID
-				MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID + 1 > table.getn(MainMenu.Table[MainMenu.Layer]) and 1 or MainMenu.Table[MainMenu.Layer].CID + 1
-				while not IsLayerIndexAvailable(MainMenu.Layer, MainMenu.Table[MainMenu.Layer].CID) do
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID + 1 > table.getn(MainMenu.Table[MainMenu.Layer]) and 1 or MainMenu.Table[MainMenu.Layer].CID + 1
-				end
-				if IsNativeOption(GetLayerIndexValue('Main', MainMenu.Table[MainMenu.Layer].CID, 'Text')) then
-					SetKeyPress(1)
-				else
-					SoundEffect2D('NavDwn')
 					DisableController()
 				end
-			else
-				DisableController()
-			end
-		elseif GetLayer() == 'Load' then
-			if GetKeyPress('Select') then
-				if IsSaveDataAvailable(MainMenu.Table[MainMenu.Layer].CID) then
-					if SetProxyFiles(true, MainMenu.Table[MainMenu.Layer].CID) then
-						SetSaveLoad(MainMenu.Table[MainMenu.Layer].CID)
+			elseif Layer == 'Load' then
+				if IsSaveDataAvailable(GetLayerCID(Layer)) then
+					if SetProxyFiles(true, GetLayerCID(Layer)) then
+						SetSaveLoad(GetLayerCID(Layer))
 					else
-						PrintOutput('failed to load file: "BullyFile'..MainMenu.Table[MainMenu.Layer].CID..'"')
+						PrintWarning('unable to load savedata: "BullyFile'..GetLayerCID(Layer)..'"')
 					end
 				end
-				SoundEffect2D('ButtonUp')
+				RunCFunction('0x5D3E60', 'ButtonUp')
 				DisableController()
-			elseif GetKeyPress('Return') then
-				SetLayer('Main')
-				SoundEffect2D('ButtonDown')
-				DisableController()
-			elseif GetKeyPress('Up') then
-				MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer]) or MainMenu.Table[MainMenu.Layer].CID - 1
-				while not IsLayerIndexAvailable(MainMenu.Layer, MainMenu.Table[MainMenu.Layer].CID) do
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer]) or MainMenu.Table[MainMenu.Layer].CID - 1
+			elseif Layer == 'Settings' then
+				if IsConfiguring() then
+					local CID = GetLayerCID(Layer)
+					SetSettingOption(CID, Select(2, GetSettingOption(CID)))
+					RunCFunction('0x5D3E60', 'ButtonUp')
 				end
-				SoundEffect2D('NavUp')
-				DisableController()
-			elseif GetKeyPress('Down') then
-				MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID + 1 > table.getn(MainMenu.Table[MainMenu.Layer]) and 1 or MainMenu.Table[MainMenu.Layer].CID + 1
-				while not IsLayerIndexAvailable(MainMenu.Layer, MainMenu.Table[MainMenu.Layer].CID) do
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID + 1 > table.getn(MainMenu.Table[MainMenu.Layer]) and 1 or MainMenu.Table[MainMenu.Layer].CID + 1
-				end
-				SoundEffect2D('NavDwn')
-				DisableController()
+				SetConfigure(not IsConfiguring())
+				SetKeyPress(7)
 			else
 				DisableController()
-			end
-		elseif GetLayer() == 'Settings' then
-			if IsConfiguring() then
-				if GetKeyPress('Select') then
-					MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].BackOpt = MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt
-					SetConfigure(false)
-					SetKeyPress(7)
-				elseif GetKeyPress('Return') then
-					MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt = MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].BackOpt
-					SetConfigure(false)
-					SetKeyPress(8)
-				elseif GetKeyPress('Left') then
-					MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt = MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].List) or MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt - 1
-					SetKeyPress(0)
-				elseif GetKeyPress('Right') then
-					MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt = MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt + 1 > table.getn(MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].List) and 1 or MainMenu.Table[MainMenu.Layer][MainMenu.Table[MainMenu.Layer].CID].CurrOpt + 1
-					SetKeyPress(1)
-				else
-					DisableController()
-				end
-			else
-				if GetKeyPress('Select') then
-					SetConfigure(true)
-					SetKeyPress(7)
-				elseif GetKeyPress('Return') then
-					MainMenu.Table[MainMenu.Layer].CID = 1
-					SetLayer('Main')
-					SetKeyPress(8)
-				elseif GetKeyPress('Up') then
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID - 1 < 1 and table.getn(MainMenu.Table[MainMenu.Layer]) or MainMenu.Table[MainMenu.Layer].CID - 1
-					SetKeyPress(1) -- this isn't a typo, it was reversed by the game itself (1 = previous)
-				elseif GetKeyPress('Down') then
-					MainMenu.Table[MainMenu.Layer].CID = MainMenu.Table[MainMenu.Layer].CID + 1 > table.getn(MainMenu.Table[MainMenu.Layer]) and 1 or MainMenu.Table[MainMenu.Layer].CID + 1
-					SetKeyPress(0) -- this isn't a typo, it was reversed by the game itself (0 = next)
-				else
-					DisableController()
-				end
 			end
 		else
 			DisableController()
 		end
 	end
 	
-	-- force start the game in a hacky way
+	-- load the game
 	if GetSaveLoad() then
-		if MainMenu.ForceCount < 10 then
-			MainMenu.ForceEntry = not MainMenu.ForceEntry
-			MainMenu.ForceCount = MainMenu.ForceCount + 1
-			if MainMenu.ForceEntry then
-				SetStickValue(7, 0, 1)
-			else
-				DisableController()
-			end
-		end
+		StartGame(IsForceReset())
 	end
 	
 	-- prevent the game to detect any input while typing on the console
@@ -166,304 +163,287 @@ end
 
 -- # VISUAL #
 
-ScreenManagement = function()
-	if GetLastSavedGame(type(shared) == 'table') == -1 or not IsFileTableAvaiable() or IsSaveDataTableEmpty() then
-		SetLayerIndexTitle('Main', 1, GetLocalization('NEWGAME')) -- FTB doesn't exist and there is no save data
-		SetLayerIndexColor('Main', 2, 100, 100, 100) -- disable "Load" to prevent the game from freezing
-	else
-		-- check the real files, so user can even load the unregistered save data
-		SetSaveDataTable(IsFileTableAvaiable() and GetSaveDataOutlines() or {})
-		SetLastSavedGame(GetLastSavedGame(true))
-		local Found = false
-		for Index = 1, 6 do
-			SetLayerIndexTitle('Load', Index, GetSaveName(Index))
-			if not IsSaveDataAvailable(Index) then
-				SetLayerIndexColor('Load', Index, 100, 100, 100)
-			else
-				SetLayerIndexColor('Load', Index, 255, 255, 255)
-				if not Found then
-					Found = true
-				end
-			end
+CreateMenuComponent = function(TUD, TAR)
+	TUD.Background = CreateTexture('Graphics/Base/Background.png')
+	TAR.Background = GetTextureDisplayAspectRatio(TUD.Background)
+	TUD.Ebox = CreateTexture('Graphics/Base/Ebox.png')
+	TAR.Ebox = GetTextureDisplayAspectRatio(TUD.Ebox)
+	TUD.Logo = CreateTexture('Graphics/Base/Logo.png')
+	TAR.Logo = GetTextureDisplayAspectRatio(TUD.Logo)
+	TUD.Prev = CreateTexture('Graphics/Base/Prev.png')
+	TAR.Prev = GetTextureDisplayAspectRatio(TUD.Prev)
+	TUD.Next = CreateTexture('Graphics/Base/Next.png')
+	TAR.Next = GetTextureDisplayAspectRatio(TUD.Next)
+	
+	local Option = GetPreference('ShowImage')
+	if Option >= 0 and Option <= 6 then
+		if Option == 0 then
+			math.randomseed(GetSystemTimer())
+			Option = math.random(1, 6)
 		end
-		if Found then
-			SetLayerIndexTitle('Main', 1, GetLocalization('CONTINUE'))
-			SetLayerIndexColor('Main', 2, 255, 255, 255)
-		else
-			SetLayerIndexTitle('Main', 1, GetLocalization('NEWGAME')) -- FTB does exist, but there is no save data yet
-			SetLayerIndexColor('Main', 2, 100, 100, 100) -- disable "Load" to avoid undefined behavior
-		end
+		
+		TUD.Image = CreateTexture('Graphics/Base/Image0'..Option..'.png')
+		TAR.Image = GetTextureDisplayAspectRatio(TUD.Image)
 	end
+end
+UpdateMenuTable = function()
+	SetSaveDataTable(IsFileTableAvaiable() and GetSaveDataOutlines() or {})
+	SetLastSavedGame(GetLastSavedGame(true))
+	for Index = 1, 6 do
+		SetLayerIndexTitle('Load', Index, GetSaveName(Index))
+		SetLayerIndexColor('Load', Index, unpack(IsSaveDataAvailable(Index) and {255, 255, 255} or {100, 100, 100}))
+	end
+	
 	local Settings = GetDisplaySettings()
 	if Settings then
 		for Index = 1, table.getn(Settings) do
 			SetSettingOption(Index, Settings[Index])
 		end
 	end
-	
-	-- input: keyboard or joystick
-	SetNavigationInput(GetNavigationInput())
-	local Listener = nil
-	if GetNavigationInput('Joystick') then
-		Listener = CreateSystemThread(JoystickListener)
+end
+UpdateMenuComponent = function(TUD, TAR, Layout)
+	for Key in pairs(TAR) do
+		TAR[Key] = GetTextureDisplayAspectRatio(TUD[Key])
 	end
 	
-	local T = {} -- texture userdata
-	local R = {} -- texture aspect ratio
+	SetLastAspectRatio(GetDisplayAspectRatio())
+	SetLastResolution(GetDisplayResolution())
 	
-	-- create basic UI texture
-	T.Background = CreateTexture('Graphics/Base/Background.png')
-	R.Background = GetTextureDisplayAspectRatio(T.Background)
-	T.Ebox = CreateTexture('Graphics/Base/Ebox.png')
-	R.Ebox = GetTextureDisplayAspectRatio(T.Ebox)
-	T.Logo = CreateTexture('Graphics/Base/Logo.png')
-	R.Logo = GetTextureDisplayAspectRatio(T.Logo)
-	T.Prev = CreateTexture('Graphics/Base/Prev.png')
-	R.Prev = GetTextureDisplayAspectRatio(T.Prev)
-	T.Next = CreateTexture('Graphics/Base/Next.png')
-	R.Next = GetTextureDisplayAspectRatio(T.Next)
+	-- clear cache
+	for Key in pairs(Layout) do
+		Layout[Key] = nil
+	end
+end
+UpdateMenuInput = function(TUD, TAR)
+	-- detect keyboard or joystick
+	SetNavigationInput(GetNavigationInput())
+	if GetNavigationInput('Joystick') then
+		CreateSystemThread(JoystickListener, 0)
+	end
 	
 	-- create button texture
-	T.Return, R.Return = CreateInputTexture('Select')
-	T.Space, R.Space = CreateInputTexture('Return')
-	
-	-- create image from the relative path or real path
-	if GetPreference('ShowImage') >= 0 then
-		local Option = GetPreference('ShowImage')
-		if Option >= 0 and Option <= 6 then
-			if Option == 0 then
-				math.randomseed(GetSystemTimer())
-			end
-			T.Image = CreateTexture('Graphics/Image/Image0'..(Option == 0 and math.random(1, 6) or Option)..'.png')
-			R.Image = GetTextureDisplayAspectRatio(T.Image)
-		end
+	TUD.Select, TAR.Select = CreateInputTexture('Select')
+	TUD.Return, TAR.Return = CreateInputTexture('Return')
+end
+
+HalveText = function(Text, Width, Max)
+	if Width <= Max then
+		return Text
 	end
 	
-	-- create protocol for controls
-	local Control = RegisterLocalEventHandler('ControllersUpdated', ButtonManagement)
+	local Point = 0
+	for _ = 1, math.ceil(Select(2, string.gsub(Text, '%s', '')) / 2 + 0.5) do
+		Point = string.find(Text, '%s', Point + 1)
+	end
+	return string.sub(Text, 1, Point - 1)..'\n'..string.sub(Text, Point + 1, string.len(Text))
+end
+DrawButton = function(L_Texture, R_Texture, L_Description, R_Description, Middle)
+	local X = Middle and 0.5 or GetFixedWidth(0.1)
+	local Y = 0.9
+	local Format = '~xy+scale+font+white~ '
+	local Scale = GetPreference('LayoutBotScale')
+	local Font = GetPreference('Font1')
 	
-	-- cache
+	-- left button
+	local L_Text = {Format..GetLocalization(L_Description), X, Y, Scale, Font, 0, 3}
+	local Width, Height = MeasureTextInline(unpack(L_Text))
+	local L_Size = Height * GetTextureDisplayAspectRatio(L_Texture)
+	L_Text[2] = X + (Middle and (
+		type(R_Texture) == 'userdata' and -(0.04 + GetFixedWidth(Width)) or GetFixedWidth(L_Size)
+	) or L_Size)
+	
+	DrawTexture(L_Texture, Middle and L_Text[2] - L_Size or X, Y, L_Size, Height)
+	DrawTextInline(unpack(L_Text))
+	
+	-- right button
+	if type(R_Texture) == 'userdata' then
+		local R_Text = {Format..GetLocalization(R_Description), X, Y, Scale, Font, 0, 3}
+		local R_Size = Height * GetTextureDisplayAspectRatio(R_Texture)
+		R_Text[2] = Middle and X + 0.04 + GetFixedWidth(R_Size) or L_Text[2] + 0.08 + R_Size
+		
+		DrawTexture(R_Texture, Middle and R_Text[2] - R_Size or L_Text[2] + 0.08, Y, R_Size, Height)
+		DrawTextInline(unpack(R_Text))
+	end
+end
+DrawMain = function(TUD, TAR, Layout, Layer)
+	if GetPreference('ShowImage') >= 0 and GetLastAspectRatio() >= 1.4 and TUD.Image then
+		DrawTexture2(TUD.Image, 1.02 - GetFixedWidth(1, TAR.Image), 0.52, 1 * TAR.Image, 1, 0, 0, 0, 0, 100)
+		DrawTexture2(TUD.Image, 1.00 - GetFixedWidth(1, TAR.Image), 0.50, 1 * TAR.Image, 1, 0)
+	end
+	DrawTexture(TUD.Logo, GetFixedWidth(0.1), 0.1, 0.2 * TAR.Logo, 0.2)
+	if Layer == 'Main' then
+		DrawButton(TUD.Select, nil, 'SELECT', nil, false)
+	else
+		DrawButton(TUD.Return, TUD.Select, 'RETURN', 'SELECT', false)
+	end
+	
+	if not Layout[Layer] then
+		Layout[Layer] = {}
+	end
+	for Index, Table in ipairs(GetLayerTable(Layer)) do
+		if not Layout[Layer][Index] then
+			Layout[Layer][Index] = {}
+			Layout[Layer][Index].Text = {'~xy+scale+font+rgb~  '..Table.Text, GetFixedWidth(0.1), 0.5, GetPreference('LayoutMidScale'), GetPreference('Font1'), Table.R, Table.G, Table.B, 0, 3}
+			
+			local Height = Select(2, MeasureTextInline(unpack(Layout[Layer][Index].Text))) * 1.1
+			Layout[Layer][Index].PadHeight = Height + 0.01
+			
+			local Space = Layout[Layer][Index].PadHeight + GetPreference('LayoutSpacing')
+			local Ceiling = (1 - Space * GetLayerSize(Layer)) / 2
+			local Current = Space * Index - Space / 2
+			Layout[Layer][Index].Text[3] = Ceiling + Current
+			Layout[Layer][Index].Y = Ceiling + Current + Height / 2
+		end
+		
+		local PadWidth = 0.2 * TAR.Logo
+		if Index == GetLayerCID(Layer) then
+			DrawTexture2(TUD.Ebox, GetFixedWidth(0.1) + PadWidth / 2, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 250, 173, 24, 220)
+		else
+			DrawTexture2(TUD.Ebox, GetFixedWidth(0.1) + PadWidth / 2, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 25, 25, 25, 50)
+		end
+		
+		DrawTextInline(unpack(Layout[Layer][Index].Text))
+	end
+end
+DrawLoad = function(TUD, TAR, Layout, Layer)
+	DrawTextInline('~xy+scale+font+white~'..GetLocalization('LOAD'), 0.5, 0.075, GetPreference('LayoutTopScale'), GetPreference('Font1'), 0, 1)
+	DrawButton(TUD.Return, TUD.Select, 'RETURN', 'SELECT', true)
+	
+	if not Layout[Layer] then
+		Layout[Layer] = {}
+	end
+	for Index, Table in ipairs(GetLayerTable(Layer)) do
+		if not Layout[Layer][Index] then
+			local Format = '~xy+scale+font+rgb~'
+			local Scale = GetPreference('LayoutMidScale')
+			local Font = GetPreference('Font1')
+			
+			Layout[Layer][Index] = {}
+			Layout[Layer][Index].L_Text = {Format..Table.Text[1], 0.5 - GetFixedWidth(0.50), 0.5, Scale, Font, Table.R, Table.G, Table.B, 0, 3}
+			
+			local Width, Height = MeasureTextInline(unpack(Layout[Layer][Index].L_Text))
+			Height = Height * 2.2
+			Layout[Layer][Index].PadHeight = Height + 0.01
+			
+			local Space = Layout[Layer][Index].PadHeight + GetPreference('LayoutSpacing')
+			local Ceiling = (1 - Space * GetLayerSize(Layer)) / 2
+			local Current = Space * Index - Space / 2
+			Layout[Layer][Index].Y = Ceiling + Current + Height / 2
+			Layout[Layer][Index].L_Text[1] = HalveText(Layout[Layer][Index].L_Text[1], Width, 0.27)
+			Layout[Layer][Index].L_Text[3] = Ceiling + Current + (Width > 0.27 and 0 or Height / 4)
+			
+			Layout[Layer][Index].M_Text = {Format..Table.Text[2], 0.5 + GetFixedWidth(0.02), 0.5, Scale, Font, Table.R, Table.G, Table.B, 0, 3}
+			Width = MeasureTextInline(unpack(Layout[Layer][Index].M_Text))
+			Layout[Layer][Index].M_Text[1] = HalveText(Layout[Layer][Index].M_Text[1], Width, 0.20)
+			Layout[Layer][Index].M_Text[3] = Ceiling + Current + (Width > 0.20 and 0 or Height / 4)
+			
+			Layout[Layer][Index].R_Text = {Format..Table.Text[3], 0.5 + GetFixedWidth(0.50), Ceiling + Current + Height / 4, Scale, Font, Table.R, Table.G, Table.B, 0, 5}
+		end
+		
+		local PadWidth = GetFixedWidth(2.25, TAR.Ebox)
+		if Index == MainMenu.Table[MainMenu.Layer].CID then
+			DrawTexture2(TUD.Ebox, 0.5, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 250, 173, 24, 220)
+		else
+			DrawTexture2(TUD.Ebox, 0.5, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 25, 25, 25, 50)
+		end
+		
+		DrawTextInline(unpack(Layout[Layer][Index].L_Text))
+		DrawTextInline(unpack(Layout[Layer][Index].M_Text))
+		DrawTextInline(unpack(Layout[Layer][Index].R_Text))
+	end
+end
+DrawSettings = function(TUD, TAR, Layout, Layer)
+	DrawTextInline('~xy+scale+font+white~'..GetLocalization('SETTINGS'), 0.5, 0.075, GetPreference('LayoutTopScale'), GetPreference('Font1'), 0, 1)
+	if IsConfiguring() then
+		DrawButton(TUD.Return, TUD.Select, 'CANCEL', 'CONFIRM', true)
+	else
+		DrawButton(TUD.Return, TUD.Select, 'RETURN', 'SELECT', true)
+	end
+	
+	if not Layout[Layer] then
+		Layout[Layer] = {}
+	end
+	for Index, Table in ipairs(GetLayerTable(Layer)) do
+		if not Layout[Layer][Index] then
+			Layout[Layer][Index] = {}
+		end
+		
+		local RGBA = (IsConfiguring() and Index ~= GetLayerCID(Layer)) and {100, 100, 100, 255} or {255, 255, 255, 255}
+		local HasOptionChanged = type(Layout[Layer][Index].Current) == 'nil' or Layout[Layer][Index].Current ~= Table.CurrOpt
+		local SelectOrDeselect = type(Layout[Layer][Index].Configuring) == 'nil' or Layout[Layer][Index].Configuring ~= IsConfiguring()
+		
+		if HasOptionChanged or SelectOrDeselect then
+			local Format = '~xy+scale+font+rgb+a~'
+			local Scale = GetPreference('LayoutMidScale')
+			Layout[Layer][Index].Option = {Format..Table.List[Table.CurrOpt], 0.5, 0.5, Scale, GetPreference('Font2'), RGBA[1], RGBA[2], RGBA[3], RGBA[4], 0, 1}
+			
+			local Height = Select(2, MeasureTextInline(unpack(Layout[Layer][Index].Option))) * 1.1
+			Layout[Layer][Index].PadHeight = Height + 0.01
+			Layout[Layer][Index].X1 = 0.5 + GetFixedWidth(Layout[Layer][Index].PadHeight)
+			Layout[Layer][Index].X2 = 0.5 + GetFixedWidth(0.5 - Layout[Layer][Index].PadHeight)
+			Layout[Layer][Index].Option[2] = (Layout[Layer][Index].X1 + Layout[Layer][Index].X2) / 2
+			
+			local Space = Layout[Layer][Index].PadHeight + GetPreference('LayoutSpacing')
+			local Ceiling = (1 - Space * GetLayerSize(Layer)) / 2
+			local Current = Space * Index - Space / 2
+			Layout[Layer][Index].Option[3] = Ceiling + Current
+			Layout[Layer][Index].Y = Ceiling + Current + Height / 2
+			
+			local LeftCorner = 0.5 - GetFixedWidth(0.5 - (Layout[Layer][Index].PadHeight / 2))
+			Layout[Layer][Index].Label = {Format..Table.Text, LeftCorner, Ceiling + Current, Scale, GetPreference('Font1'), RGBA[1], RGBA[2], RGBA[3], RGBA[4], 0, 3}
+			Layout[Layer][Index].Current = Table.CurrOpt
+			Layout[Layer][Index].Configuring = IsConfiguring()
+		end
+		
+		local PadWidth = GetFixedWidth(2.25, TAR.Ebox)
+		if Index == GetLayerCID(Layer) then
+			DrawTexture2(TUD.Ebox, 0.5, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 250, 173, 24, 220)
+		else
+			DrawTexture2(TUD.Ebox, 0.5, Layout[Layer][Index].Y, PadWidth, Layout[Layer][Index].PadHeight, 0, 25, 25, 25, 50)
+		end
+		
+		-- We don't need width for TUD.Prev and TUD.Next, they're 1:1 textures
+		DrawTexture2(TUD.Prev, Layout[Layer][Index].X1, Layout[Layer][Index].Y, Layout[Layer][Index].PadHeight * TAR.Prev, Layout[Layer][Index].PadHeight, 0, unpack(RGBA))
+		DrawTexture2(TUD.Next, Layout[Layer][Index].X2, Layout[Layer][Index].Y, Layout[Layer][Index].PadHeight * TAR.Next, Layout[Layer][Index].PadHeight, 0, unpack(RGBA))
+		DrawTextInline(unpack(Layout[Layer][Index].Option))
+		DrawTextInline(unpack(Layout[Layer][Index].Label))
+	end
+end
+
+ScreenManagement = function()
+	local TUD = {} -- texture userdata
+	local TAR = {} -- texture aspect ratio
 	local Layout = {}
-	local Button = {}
 	
+	CreateMenuComponent(TUD, TAR)
+	UpdateMenuTable()
+	UpdateMenuInput(TUD, TAR)
+	
+	local LayerInput = RegisterLocalEventHandler('ControllersUpdated', ButtonManagement)
+	local LayerFunction = {
+		['Main'] = DrawMain, ['Story'] = DrawMain,
+		['Load'] = DrawLoad, ['Settings'] = DrawSettings,
+	}
 	while true do
 		if type(shared) == 'table' and HasStoryModeBeenSelected() then
 			break
 		end
-		
-		-- adjust aspect ratio
+		if IsKeyBeingPressed('T') then
+			CaptureScreen('_MMO.png')
+		end
+		-- update TAR and Layout when the resolution has changed
 		if table.concat({GetLastResolution()}) ~= table.concat({GetDisplayResolution()}) then
-			for Key in pairs(R) do
-				R[Key] = GetTextureDisplayAspectRatio(T[Key])
-			end
-			
-			SetLastAspectRatio(GetDisplayAspectRatio())
-			SetLastResolution(GetDisplayResolution())
-			
-			-- clear cache
-			for Key in pairs(Layout) do
-				Layout[Key] = nil
-			end
-			for Key in pairs(Button) do
-				Button[Key] = nil
-			end
+			UpdateMenuComponent(TUD, TAR, Layout)
 		end
 		
-		-- 75% of the text is cached, it may look confusing, but it is the best option for a long-term use
-		DrawTexture2(T.Background, 0.5, 0.5, 1 * R.Background, 1, 0)
-		if GetLayer() == 'Main' then
-			if GetPreference('ShowImage') >= 0 and GetLastAspectRatio() >= 1.4 and T.Image then
-				DrawTexture2(T.Image, 1.02 - GetFixedWidth(1, R.Image), 0.52, 1 * R.Image, 1, 0, 0, 0, 0, 100)
-				DrawTexture2(T.Image, 1.00 - GetFixedWidth(1, R.Image), 0.50, 1 * R.Image, 1, 0)
-			end
-			DrawTexture(T.Logo, GetFixedWidth(0.1), 0.1, 0.2 * R.Logo, 0.2)
-			
-			if not Button['Main'] then
-				Button['Main'] = {}
-				Button['Main'].X = GetFixedWidth(0.1)
-				Button['Main'].Y = 0.9
-				Button['Main'].Text = {'~xy+scale+font+white~ '..GetLocalization('SELECT'), Button['Main'].X, Button['Main'].Y, GetPreference('MainBotScale'), GetPreference('Font1'), 0, 3}
-				Button['Main'].Width, Button['Main'].Height = MeasureTextInline(unpack(Button['Main'].Text))
-				Button['Main'].Text[2] = Button['Main'].X + (Button['Main'].Height * R.Return)
-			end
-			DrawTexture(T.Return, Button['Main'].X, Button['Main'].Y, Button['Main'].Height * R.Return, Button['Main'].Height)
-			DrawTextInline(unpack(Button['Main'].Text))
-			
-			for Index, Table in ipairs(MainMenu.Table['Main']) do
-				if not Layout['Main'] then
-					Layout['Main'] = {}
-				end
-				if not Layout['Main'][Index] then
-					Layout['Main'][Index] = {}
-					Layout['Main'][Index].Text = {'~xy+scale+font+rgb~  '..Table.Text, GetFixedWidth(0.1), 0.5, GetPreference('MainMidScale'), GetPreference('Font1'), Table.R, Table.G, Table.B, 0, 3}
-					Layout['Main'][Index].Width, Layout['Main'][Index].Height = MeasureTextInline(unpack(Layout['Main'][Index].Text))
-					Layout['Main'][Index].Size = Layout['Main'][Index].Height * 1.1
-					Layout['Main'][Index].TopY = ((1 - (Layout['Main'][Index].Size + GetPreference('MainSpacing')) * table.getn(MainMenu.Table['Main'])) / 2) + ((Layout['Main'][Index].Size + GetPreference('MainSpacing')) * Index) - ((Layout['Main'][Index].Size + GetPreference('MainSpacing')) / 2)
-					Layout['Main'][Index].MidY = Layout['Main'][Index].TopY + (Layout['Main'][Index].Height / 2)
-					Layout['Main'][Index].Text[3] = Layout['Main'][Index].TopY
-				end
-				
-				if Index == MainMenu.Table[MainMenu.Layer].CID then
-					DrawTexture2(T.Ebox, GetFixedWidth(0.1) + ((0.2 * R.Logo) / 2), Layout['Main'][Index].MidY, 0.2 * R.Logo, Layout['Main'][Index].Size + 0.010, 0, 250, 173, 24, 220)
-				else
-					DrawTexture2(T.Ebox, GetFixedWidth(0.1) + ((0.2 * R.Logo) / 2), Layout['Main'][Index].MidY, 0.2 * R.Logo, Layout['Main'][Index].Size + 0.010, 0, 25, 25, 25, 50)
-				end
-				DrawTextInline(unpack(Layout['Main'][Index].Text))
-			end
-		elseif GetLayer() == 'Load' then
-			DrawTextInline('~xy+scale+font+white~'..GetLocalization('LOAD'), 0.5, 0.075, GetPreference('LoadTopScale'), GetPreference('Font1'), 0, 1)
-			
-			if not Button['Load'] then
-				Button['Load'] = {}
-				Button['Load'].X = 0.5
-				Button['Load'].Y = 0.9
-				Button['Load'].L_Text = {'~xy+scale+font+white~ '..GetLocalization('RETURN'), Button['Load'].X, Button['Load'].Y, GetPreference('LoadBotScale'), GetPreference('Font1'), 0, 3}
-				Button['Load'].R_Text = {'~xy+scale+font+white~ '..GetLocalization('SELECT'), Button['Load'].X, Button['Load'].Y, GetPreference('LoadBotScale'), GetPreference('Font1'), 0, 3}
-				Button['Load'].Width, Button['Load'].Height = MeasureTextInline(unpack(Button['Load'].L_Text))
-				Button['Load'].L_Text[2] = (Button['Load'].X - 0.04) - GetFixedWidth(Button['Load'].Width)
-				Button['Load'].R_Text[2] = (Button['Load'].X + 0.04) + GetFixedWidth(Button['Load'].Height * R.Return)
-			end
-			DrawTexture(T.Space, Button['Load'].L_Text[2] - (Button['Load'].Height * R.Space), Button['Load'].Y, Button['Load'].Height * R.Space, Button['Load'].Height)
-			DrawTextInline(unpack(Button['Load'].L_Text))
-			DrawTexture(T.Return, Button['Load'].R_Text[2] - (Button['Load'].Height * R.Return), Button['Load'].Y, Button['Load'].Height * R.Return, Button['Load'].Height)
-			DrawTextInline(unpack(Button['Load'].R_Text))
-			
-			for Index, Table in ipairs(MainMenu.Table['Load']) do
-				if not Layout['Load'] then
-					Layout['Load'] = {}
-				end
-				if not Layout['Load'][Index] then
-					Layout['Load'][Index] = {}
-					Layout['Load'][Index].L_Text = {'~xy+scale+font+rgb~'..Table.Text[1], 0.5 - GetFixedWidth(0.50), 0.5, GetPreference('LoadMidScale'), GetPreference('Font1'), Table.R, Table.G, Table.B, 0, 3}
-					Layout['Load'][Index].M_Text = {'~xy+scale+font+rgb~'..Table.Text[2], 0.5 + GetFixedWidth(0.02), 0.5, GetPreference('LoadMidScale'), GetPreference('Font1'), Table.R, Table.G, Table.B, 0, 3}
-					Layout['Load'][Index].R_Text = {'~xy+scale+font+rgb~'..Table.Text[3], 0.5 + GetFixedWidth(0.50), 0.5, GetPreference('LoadMidScale'), GetPreference('Font1'), Table.R, Table.G, Table.B, 0, 5}
-					Layout['Load'][Index].L_Width, Layout['Load'][Index].L_Height = MeasureTextInline(unpack(Layout['Load'][Index].L_Text))
-					Layout['Load'][Index].M_Width, Layout['Load'][Index].M_Height = MeasureTextInline(unpack(Layout['Load'][Index].M_Text))
-					Layout['Load'][Index].Size = Layout['Load'][Index].L_Height * 2.2
-					Layout['Load'][Index].TopY = ((1 - (Layout['Load'][Index].Size + GetPreference('LoadSpacing')) * table.getn(MainMenu.Table['Load'])) / 2) + ((Layout['Load'][Index].Size + GetPreference('LoadSpacing')) * Index) - ((Layout['Load'][Index].Size + GetPreference('LoadSpacing')) / 2)
-					Layout['Load'][Index].MidY = Layout['Load'][Index].TopY + (Layout['Load'][Index].L_Height / 2)
-					Layout['Load'][Index].L_Text[3] = Layout['Load'][Index].TopY
-					Layout['Load'][Index].M_Text[3] = Layout['Load'][Index].TopY
-					Layout['Load'][Index].R_Text[3] = Layout['Load'][Index].TopY
-					
-					if Layout['Load'][Index].L_Width > 0.27 and string.find(Layout['Load'][Index].L_Text[1], '%s') then
-						local Old = Layout['Load'][Index].L_Text[1]
-						Layout['Load'][Index].L_Text[1] = string.gsub(Old, '([^%s]*)%s([^%s]*)$', '%1\n%2')
-						if MeasureTextInline(unpack(Layout['Load'][Index].L_Text)) > 0.27 then
-							Layout['Load'][Index].L_Text[1] = string.gsub(Old, ':%s', ':\n')
-						end
-						Layout['Load'][Index].L_Text[3] = Layout['Load'][Index].TopY - (Layout['Load'][Index].L_Height / 2)
-					end
-					if Layout['Load'][Index].M_Width > 0.20 and string.find(Layout['Load'][Index].M_Text[1], '%s') then
-						local Old = Layout['Load'][Index].M_Text[1]
-						Layout['Load'][Index].M_Text[1] = string.gsub(Old, '([^%s]*)%s([^%s]*)$', '%1\n%2')
-						if MeasureTextInline(unpack(Layout['Load'][Index].M_Text)) > 0.20 then
-							local Point = 0
-							for _ = 1, math.ceil(Select(2, string.gsub(Old, '%s', '')) / 2 + 0.5) do
-								Point = string.find(Old, '%s', Point + 1)
-							end
-							Layout['Load'][Index].M_Text[1] = string.sub(Old, 1, Point - 1)..'\n'..string.sub(Old, Point + 1, string.len(Old))
-						end
-						Layout['Load'][Index].M_Text[3] = Layout['Load'][Index].TopY - (Layout['Load'][Index].M_Height / 2)
-					end
-				end
-				
-				if Index == MainMenu.Table[MainMenu.Layer].CID then
-					DrawTexture2(T.Ebox, 0.5, Layout['Load'][Index].MidY, GetFixedWidth(2.25, R.Ebox), Layout['Load'][Index].Size, 0, 250, 173, 24, 220)
-				else
-					DrawTexture2(T.Ebox, 0.5, Layout['Load'][Index].MidY, GetFixedWidth(2.25, R.Ebox), Layout['Load'][Index].Size, 0, 25, 25, 25, 50)
-				end
-				DrawTextInline(unpack(Layout['Load'][Index].L_Text))
-				DrawTextInline(unpack(Layout['Load'][Index].M_Text))
-				DrawTextInline(unpack(Layout['Load'][Index].R_Text))
-			end
-		elseif GetLayer() == 'Settings' then
-			DrawTextInline('~xy+scale+font+white~'..GetLocalization('SETTINGS'), 0.5, 0.075, GetPreference('SettingTopScale'), GetPreference('Font1'), 0, 1)
-			
-			if not Button['Settings'] then
-				Button['Settings'] = {}
-				Button['Settings'].X = 0.5
-				Button['Settings'].Y = 0.9
-				Button['Settings'].L_Text = {'', Button['Settings'].X, Button['Settings'].Y, GetPreference('SettingBotScale'), GetPreference('Font1'), 0, 3}
-				Button['Settings'].R_Text = {'', Button['Settings'].X, Button['Settings'].Y, GetPreference('SettingBotScale'), GetPreference('Font1'), 0, 3}
-			end
-			if type(Button['Settings'].Configure) == 'nil' or Button['Settings'].Configure ~= IsConfiguring() then
-				Button['Settings'].L_Text[1] = '~xy+scale+font+white~ '..GetLocalization(IsConfiguring() and 'CANCEL' or 'RETURN')
-				Button['Settings'].R_Text[1] = '~xy+scale+font+white~ '..GetLocalization(IsConfiguring() and 'CONFIRM' or 'SELECT')
-				Button['Settings'].Width, Button['Settings'].Height = MeasureTextInline(unpack(Button['Settings'].L_Text))
-				Button['Settings'].L_Text[2] = (Button['Settings'].X - 0.04) - GetFixedWidth(Button['Settings'].Width)
-				Button['Settings'].R_Text[2] = (Button['Settings'].X + 0.04) + GetFixedWidth(Button['Settings'].Height * R.Return)
-				Button['Settings'].Configure = IsConfiguring()
-			end
-			DrawTexture(T.Space, Button['Settings'].L_Text[2] - (Button['Settings'].Height * R.Space), Button['Settings'].Y, Button['Settings'].Height * R.Space, Button['Settings'].Height)
-			DrawTextInline(unpack(Button['Settings'].L_Text))
-			DrawTexture(T.Return, Button['Settings'].R_Text[2] - (Button['Settings'].Height * R.Return), Button['Settings'].Y, Button['Settings'].Height * R.Return, Button['Settings'].Height)
-			DrawTextInline(unpack(Button['Settings'].R_Text))
-			
-			for Index, Table in ipairs(MainMenu.Table['Settings']) do
-				if not Layout['Settings'] then
-					Layout['Settings'] = {}
-				end
-				if not Layout['Settings'][Index] then
-					Layout['Settings'][Index] = {}
-				end
-				if not Layout['Settings'][Index].Option or Layout['Settings'][Index].Option ~= Table.CurrOpt then
-					Layout['Settings'][Index].Text = {'~xy+scale+font+rgb~'..Table.List[Table.CurrOpt], 0.5, 0.5, GetPreference('SettingMidScale'), GetPreference('Font2'), 255, 255, 255, 0, 1}
-					Layout['Settings'][Index].Width, Layout['Settings'][Index].Height = MeasureTextInline(unpack(Layout['Settings'][Index].Text))
-					Layout['Settings'][Index].Size = Layout['Settings'][Index].Height * 1.1
-					Layout['Settings'][Index].X1 = 0.5 + GetFixedWidth(Layout['Settings'][Index].Size)
-					Layout['Settings'][Index].X2 = 0.5 + GetFixedWidth(0.5 - Layout['Settings'][Index].Size)
-					Layout['Settings'][Index].TopY = ((1 - (Layout['Settings'][Index].Size + GetPreference('SettingSpacing')) * table.getn(MainMenu.Table['Settings'])) / 2) + ((Layout['Settings'][Index].Size + GetPreference('SettingSpacing')) * Index) - ((Layout['Settings'][Index].Size + GetPreference('SettingSpacing')) / 2)
-					Layout['Settings'][Index].MidY = Layout['Settings'][Index].TopY + (Layout['Settings'][Index].Height / 2)
-					Layout['Settings'][Index].Text[2] = (Layout['Settings'][Index].X1 + Layout['Settings'][Index].X2) / 2
-					Layout['Settings'][Index].Text[3] = Layout['Settings'][Index].TopY
-					Layout['Settings'][Index].RGB = {255, 255, 255}
-					Layout['Settings'][Index].Option = Table.CurrOpt
-				end
-				if IsConfiguring() then
-					if (Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID - 1] and Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID - 1].RGB[1] == 255) or (Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID + 1] and Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID + 1].RGB[1] == 255) then
-						for Option = 1, table.getn(MainMenu.Table['Settings']) do
-							if Option ~= MainMenu.Table[MainMenu.Layer].CID then
-								Layout['Settings'][Option].RGB = {100, 100, 100}
-								Layout['Settings'][Option].Text[6] = Layout['Settings'][Option].RGB[1]
-								Layout['Settings'][Option].Text[7] = Layout['Settings'][Option].RGB[2]
-								Layout['Settings'][Option].Text[8] = Layout['Settings'][Option].RGB[3]
-							end
-						end
-					end
-				else
-					if (Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID - 1] and Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID - 1].RGB[1] == 100) or (Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID + 1] and Layout['Settings'][MainMenu.Table[MainMenu.Layer].CID + 1].RGB[1] == 100) then
-						for Option = 1, table.getn(MainMenu.Table['Settings']) do
-							if Option ~= MainMenu.Table[MainMenu.Layer].CID then
-								Layout['Settings'][Option].RGB = {255, 255, 255}
-								Layout['Settings'][Option].Text[6] = Layout['Settings'][Option].RGB[1]
-								Layout['Settings'][Option].Text[7] = Layout['Settings'][Option].RGB[2]
-								Layout['Settings'][Option].Text[8] = Layout['Settings'][Option].RGB[3]
-							end
-						end
-					end
-				end
-				
-				if Index == MainMenu.Table[MainMenu.Layer].CID then
-					DrawTexture2(T.Ebox, 0.5, Layout['Settings'][Index].MidY, GetFixedWidth(2.25, R.Ebox), Layout['Settings'][Index].Size + 0.010, 0, 250, 173, 24, 220)
-				else
-					DrawTexture2(T.Ebox, 0.5, Layout['Settings'][Index].MidY, GetFixedWidth(2.25, R.Ebox), Layout['Settings'][Index].Size + 0.010, 0, 25, 25, 25, 50)
-				end
-				DrawTexture2(T.Prev, Layout['Settings'][Index].X1, Layout['Settings'][Index].MidY, Layout['Settings'][Index].Size * R.Prev, Layout['Settings'][Index].Size, 0, Layout['Settings'][Index].RGB[1], Layout['Settings'][Index].RGB[2], Layout['Settings'][Index].RGB[3], 255)
-				DrawTexture2(T.Next, Layout['Settings'][Index].X2, Layout['Settings'][Index].MidY, Layout['Settings'][Index].Size * R.Next, Layout['Settings'][Index].Size, 0, Layout['Settings'][Index].RGB[1], Layout['Settings'][Index].RGB[2], Layout['Settings'][Index].RGB[3], 255)
-				DrawTextInline('~xy+scale+font+rgb~'..Table.Text, 0.5 - GetFixedWidth(0.5 - (Layout['Settings'][Index].Size / 2)), Layout['Settings'][Index].TopY, GetPreference('SettingMidScale'), GetPreference('Font1'), Layout['Settings'][Index].RGB[1], Layout['Settings'][Index].RGB[2], Layout['Settings'][Index].RGB[3], 0, 3)
-				DrawTextInline(unpack(Layout['Settings'][Index].Text))
-			end
-		end
+		-- ui
+		DrawTexture2(TUD.Background, 0.5, 0.5, 1 * TAR.Background, 1, 0)
+		LayerFunction[GetLayer()](TUD, TAR, Layout, GetLayer())
 		
 		Wait(0)
 	end
 	
 	if type(shared) == 'table' then
-		RemoveEventHandler(Control)
-		
-		if type(Listener) == 'thread' then
-			TerminateThread(Listener)
-		end
+		RemoveEventHandler(LayerInput)
 	end
 end
