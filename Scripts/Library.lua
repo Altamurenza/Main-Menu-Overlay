@@ -5,9 +5,15 @@
 -- # HEADER #
 
 RequireSystemAccess()
-RequireLoaderVersion(7)
+RequireLoaderVersion(10)
 
-loadlib(GetPackageFilePath('MainMenu.dll'), 'MainMenu')()
+local Lib, Err = loadlib(GetPackageFilePath('MainMenu.dll'), 'MainMenu')
+if type(Lib) ~= 'function' then
+	error(Err)
+end
+Lib() -- Calling Lib will not return anything, it only registers functions to the _G table.
+
+require('utility/texture')
 
 
 -- # DISPLAY FUNCTIONS #
@@ -23,14 +29,24 @@ IsNativeOption = function(Option)
 		return
 	end
 	return ({
+		-- Layer: Main
 		[GetLocalization('STORY')] = true,
 		[GetLocalization('SETTINGS')] = true,
 		[GetLocalization('EXIT')] = true,
+		
+		-- Layer: Settings
+		[GetLocalization('RESOLUTION')] = true,
+		[GetLocalization('ANTIALIASING')] = true,
+		[GetLocalization('VSYNC')] = true,
+		[GetLocalization('SHADOWS')] = true,
 	})[Option] or false
 end
 IsLayerIndexAvailable = function(Layer, Index)
 	local Color = GetLayerIndexValue(Layer, Index, 'R')
 	return type(Color) == 'number' and Color ~= 100 or nil
+end
+IsMessageQueuing = function()
+	return next(MainMenu.MessageQueue) and type(MainMenu.MessageThread) ~= 'thread'
 end
 GetLayer = function()
 	if not PreCheckKey('Layer', 'string') then
@@ -89,6 +105,12 @@ GetLastResolution = function()
 		return
 	end
 	return MainMenu.Resolution[1], MainMenu.Resolution[2]
+end
+GetQueuedMessage = function(Index)
+	if not PreCheckArg(Index, 'number') then
+		return
+	end
+	return MainMenu.MessageQueue[Index][1], MainMenu.MessageQueue[Index][2]
 end
 SetConfigure = function(Configure)
 	if not PreCheckArg(Configure, 'boolean') then
@@ -167,19 +189,19 @@ SetLastResolution = function(Width, Height)
 	end
 	MainMenu.Resolution = {Width, Height}
 end
-SetPreference = function(Table)
-	if not PreCheckArg(Table, 'table') then
+SetQueuedMessage = function(Message, Second)
+	if not PreCheckArgs({{Message, 'string'}, {Second, 'number'}}) then 
 		return
 	end
-	MainMenu.Settings = Table
+	table.insert(MainMenu.MessageQueue, {Message, Second})
 end
-SetLocalization = function(Table)
-	if not PreCheckArg(Table, 'table') then
-		return
-	end
-	MainMenu.TextMenu = Table
+ShowQueuedMessage = function(Func, TUD, TAR, Message, Second)
+	if not PreCheckArgs({
+		{Func, 'function'}, {TUD, 'table'}, {TAR, 'table'},
+		{Message, 'string'}, {Second, 'number'}
+	}) then return end
+	MainMenu.MessageThread = CreateDrawingThread(Func, TUD, TAR, Message, Second)
 end
-
 
 -- # INPUT FUNCTIONS #
 
@@ -209,7 +231,7 @@ GetLocalization = function(Key)
 	end
 	
 	if type(Key) == 'nil' then
-		local Lang = GetPreference('Localization')
+		local Lang = GetPreference('MenuLocalization')
 		
 		local Path = GetScriptPath()..'/Translations/'..Lang..'.txt'
 		local File = io.open(Path, 'rb')
@@ -236,7 +258,8 @@ GetPreference = function(Key)
 	
 	if type(Key) == 'nil' then
 		local Test = {
-			Localization = {Type = 'string', Default = 'English'},
+			GameLocalization = {Type = 'number', Default = -1},
+			MenuLocalization = {Type = 'string', Default = 'English'},
 			ShowImage = {Type = 'number', Default = 0},
 			Font1 = {Type = 'string', Default = 'Georgia'},
 			Font2 = {Type = 'string', Default = 'Century'},
@@ -269,6 +292,98 @@ GetPreference = function(Key)
 		return Subs
 	end
 	return
+end
+SetPreference = function(Language)
+	local Path = GetScriptPath()..'/Preferences.ini'
+	local File = io.open(Path, 'wb')
+	if not File then
+		PrintWarning('could not write a file: "'..Path..'"')
+	end
+	
+	local Preference = [[
+[Localization]
+# 
+# Introduced in: 1.0
+# Updated in: 3.0
+# 
+# Set the 'GameLocalization' parameter to one of the following numerical values 
+# to change the game language:
+# 
+#    -1 = Default (based on the system registry)
+#     0 = English (US)
+#     1 = French
+#     2 = German
+#     3 = Italian
+#     4 = Spanish
+#     5 = English (UK)
+#     6 = Russian
+#     7 = Japanese
+# 
+# To customize main menu localization, set 'MenuLocalization' to the name of a 
+# localization folder in the '../MainMenu/Translations' folder.
+# 
+GameLocalization=%d
+MenuLocalization=%s
+
+[Image]
+# 
+# Introduced in: 1.0
+# Updated in: 2.0
+# 
+# Set the 'ShowImage' parameter to change the title screen image.
+# The image must be located in the "../Graphics/Base/" folder.
+# 
+#    -1 = No image
+#     0 = Random image
+#     1-6 = Fixed image (select a specific image by number)
+# 
+ShowImage=%d
+
+[FontType]
+# 
+# Introduced in: 1.0
+# Updated in: -
+# 
+# Set 'Font1' and 'Font2' to any installed font available on the user's system.
+#     'Font1' is primarily used across various UI components.
+#     'Font2' is exclusively used for options in the Settings menu.
+# 
+Font1=%s
+Font2=%s
+
+[Layout]
+# 
+# Introduced in: 1.0
+# Updated in: 2.3
+# 
+# Adjust the following values if the menu scale appears too small to read.
+# 
+LayoutTopScale=%.2f
+LayoutMidScale=%.2f
+LayoutBotScale=%.2f
+LayoutSpacing=%.2f
+	]]
+	File:write(string.format(
+		Preference,
+		Language,
+		GetPreference('MenuLocalization'),
+		GetPreference('ShowImage'),
+		GetPreference('Font1'),
+		GetPreference('Font2'),
+		GetPreference('LayoutTopScale'),
+		GetPreference('LayoutMidScale'),
+		GetPreference('LayoutBotScale'),
+		GetPreference('LayoutSpacing')
+	))
+	File:close()
+	
+	MainMenu.Settings['GameLocalization'] = Language
+end
+SetLocalization = function(Table)
+	if not PreCheckArg(Table, 'table') then
+		return
+	end
+	MainMenu.TextMenu = Table
 end
 
 
@@ -315,7 +430,7 @@ GetKeyPress = function(Key)
 	if GetSystemTimer() > MainMenu.KeyTimer and GetNavigationInput(Key) then
 		local Input = GetNavigationInput(Key)
 		for Index = 1, table.getn(Input) do
-			if Input[Index] and (Index > 1 and Input[Index] ~= Input[1] or true) then
+			if Input[Index] then
 				--[[
 					possibly bugs from DSL:
 					1. IsKeyBeingPressed(Key, 0) is behaving like IsKeyPressed, but IsKeyBeingPressed(Key) is functioning as expected
@@ -339,28 +454,18 @@ GetNavigationInput = function(Key)
 	end
 	
 	if type(Key) == 'nil' then
-		local InputMap = {
-			Left = {Index = 0, Codes = {'DIK_LEFT', 'DIK_A', 2}}, 
-			Right = {Index = 1, Codes = {'DIK_RIGHT', 'DIK_D', 3}},
-			Up = {Index = 2, Codes = {'DIK_UP', 'DIK_W', 0}}, 
-			Down = {Index = 3, Codes = {'DIK_DOWN', 'DIK_S', 1}}, 
-			Select = {Index = 7, Codes = {'DIK_RETURN', 12}}, 
-			Return = {Index = 8, Codes = {'DIK_SPACE', 13}},
-		}
-		
-		local Result = {}
-		Result.Joystick = IsUsingJoystick(0)
-		
-		for String, Table in pairs(InputMap) do
-			local Type, Code = GetInputHardware(Table.Index, 0)
-			Type = string.upper(Type)
+		return {
+			-- joystick or keyboard
+			Joystick = IsUsingJoystick(0),
 			
-			Result[String] = {
-				Result.Joystick and Code or ((Input[Type] and Input[Type][Code]) and Input[Type][Code] or false), 
-				unpack(Table.Codes)
-			}
-		end
-		return Result
+			-- input map
+			Left = {'DIK_LEFT', 'DIK_A', 2}, 
+			Right = {'DIK_RIGHT', 'DIK_D', 3},
+			Up = {'DIK_UP', 'DIK_W', 0}, 
+			Down = {'DIK_DOWN', 'DIK_S', 1}, 
+			Select = {'DIK_RETURN', 12}, 
+			Return = {'DIK_SPACE', 13},
+		}
 	end
 	return
 end
@@ -386,6 +491,29 @@ SetKeyPress = function(Key)
 	end
 	MainMenu.KeyTimer = GetSystemTimer() + 150
 end
+SetKeyPressOnce = function(Key, Wait1, Wait2)
+	if not PreCheckArg(Key, 'number') then
+		return
+	end
+	
+	local Sleep = function(Ms)
+		local Timer = GetSystemTimer()
+		while Timer + Ms > GetSystemTimer() do
+			Wait(0)
+		end
+	end
+	
+	local IsPressed = false
+	local Event = RegisterLocalEventHandler('ControllerUpdating', function(ID)
+		if ID == 0 and not IsPressed then
+			SetButtonPressed(Key, 0, true)
+			IsPressed = true
+		end
+	end)
+	Sleep(150)
+	RemoveEventHandler(Event)
+	Sleep(150)
+end
 SetNavigationInput = function(Table)
 	if not PreCheckArg(Table, 'table') then
 		return
@@ -393,14 +521,19 @@ SetNavigationInput = function(Table)
 	MainMenu.Input = Table
 end
 SetJoystickValue = function(Controller, Button, Pressed, BeingPressed, BeingReleased)
-	if not PreCheckArgs({
-		{Controller, 'number'}, {Button, 'number'}, {Pressed, 'boolean'}, 
-		{BeingPressed, 'boolean'}, {BeingReleased, 'boolean'}
-	}) then return end
+	if not PreCheckArgs({{Controller, 'number'}, {Button, 'number'}}) then
+		return
+	end
 	
-	Joystick[Controller].Pressed[Button] = Pressed
-	Joystick[Controller].BeingPressed[Button] = BeingPressed
-	Joystick[Controller].BeingReleased[Button] = BeingReleased
+	if type(Pressed) ~= 'nil' then
+		Joystick[Controller].Pressed[Button] = Pressed
+	end
+	if type(BeingPressed) ~= 'nil' then
+		Joystick[Controller].BeingPressed[Button] = BeingPressed
+	end
+	if type(BeingReleased) ~= 'nil' then
+		Joystick[Controller].BeingReleased[Button] = BeingReleased
+	end
 end
 DisableController = function()
 	if GetNavigationInput('Joystick') then
@@ -409,21 +542,22 @@ DisableController = function()
 	ZeroController(0)
 end
 JoystickListener = function(Controller)
-	while not HasStoryModeBeenSelected() do
+	while not RunCFunction('0x5D53E0') do
 		Wait(0)
 		
 		for Button = 0, 15 do
-			local IsPressed = IsGamepadButtonPressed(Button, Controller)
-			local WasPressed = Joystick[Controller].Pressed[Button]
+			if GetJoystickValue(Controller, Button, 'BeingPressed') then
+				SetJoystickValue(Controller, Button, nil, false, nil)
+			end
+			if GetJoystickValue(Controller, Button, 'BeingReleased') then
+				SetJoystickValue(Controller, Button, nil, nil, false)
+			end
 			
-			if IsPressed and not WasPressed then
-				SetJoystickValue(Controller, Button, true, true, false)
-			elseif IsPressed and WasPressed then
-				SetJoystickValue(Controller, Button, false, true, false)
-			elseif not IsPressed and WasPressed then
-				SetJoystickValue(Controller, Button, false, false, true)
-			else
-				SetJoystickValue(Controller, Button, false, false, false)
+			local IsPressed = IsGamepadButtonPressed(Button, Controller)
+			if IsPressed and not GetJoystickValue(Controller, Button, 'Pressed') then
+				SetJoystickValue(Controller, Button, true, true, nil)
+			elseif not IsPressed and GetJoystickValue(Controller, Button, 'Pressed') then
+				SetJoystickValue(Controller, Button, false, nil, true)
 			end
 		end
 	end
@@ -535,6 +669,7 @@ SetSaveLoad = function(Order)
 	if type(Order) == 'nil' then
 		if type(GetSaveLoad()) == 'number' then
 			SetProxyFiles(false)
+			print('revert')
 		end
 		MainMenu.Table['Main'].LID = 1
 		MainMenu.Table['Main'].CID = 1
@@ -564,10 +699,31 @@ SetForceReset = function(Reset)
 		RunCFunction('0x5D53A0')
 	end
 end
+UpdateSaveData = function()
+	if not IsSavingGame() then
+		return
+	end
+	
+	local Date = GetSaveDataDate('FileTableBully')
+	local EncodedPNG = CapturePNG()
+	repeat
+		Wait(0)
+	until not IsSavingGame()
+	
+	if Date ~= GetSaveDataDate('FileTableBully') and type(EncodedPNG) == 'string' and IsFileTableAvaiable() then
+		local Slot = GetSaveLastID()
+		local File = io.open(GetScriptPath()..'/Graphics/Load/BullyFile'..Slot..'.png', 'wb')
+		File:write(EncodedPNG)
+		File:close()
+	end
+end
 
 
 -- # SETTING FUNCTIONS #
 
+GetLanguageOption = function()
+	return GetPreference('GameLocalization') == -1 and 1 or RunCFunction('0x5D5C10') + 2
+end
 GetSettingOption = function(Index)
 	if not PreCheckArg(MainMenu.Table['Settings'][Index], 'table', 1, 'invalid index') then
 		return
@@ -646,40 +802,6 @@ StartGame = function(Reset)
 		MainMenu.ForceEntry = MainMenu.ForceEntry + 1
 	end
 end
-CreateInputTexture = function(Key)
-	if not PreCheckArg(Key, 'string') then
-		return
-	end
-	
-	local Button = GetNavigationInput(Key)[1]
-	if not Button then
-		local Secondary = {
-			Up = GetNavigationInput('Joystick') and Input['BUTTON'][0] or 'DIK_UP',
-			Down = GetNavigationInput('Joystick') and Input['BUTTON'][1] or 'DIK_DOWN',
-			Left = GetNavigationInput('Joystick') and Input['BUTTON'][2] or 'DIK_LEFT',
-			Right = GetNavigationInput('Joystick') and Input['BUTTON'][3] or 'DIK_RIGHT',
-			Select = GetNavigationInput('Joystick') and Input['BUTTON'][12] or 'DIK_RETURN',
-			Return = GetNavigationInput('Joystick') and Input['BUTTON'][13] or 'DIK_SPACE',
-		}
-		if not Secondary[Key] then
-			PrintWarning("invalid key '"..Key.."' to '"..GetFunctionName(1).."'")
-			return
-		end
-		
-		Button = Secondary[Key]
-	end
-	if type(Button) == 'number' and GetNavigationInput('Joystick') then
-		Button = Input['BUTTON'][Button]
-	end
-	
-	local Texture = Select(2, pcall(CreateTexture, 'Graphics/Button/'..Button..'.png'))
-	if type(Texture) == 'userdata' then
-		return Texture, GetTextureDisplayAspectRatio(Texture)
-	end
-	
-	Texture = CreateTexture('Graphics/Button/DIK_PLAIN.png')
-	return Texture, GetTextureDisplayAspectRatio(Texture)
-end
 GetFunctionName = function(Level)
 	if type(Level) == 'number' then
 		return debug.getinfo(Level, 'n').name or '??'
@@ -754,129 +876,6 @@ end
 
 -- # LOCAL #
 
-Input = {
-	['KEYBOARD'] = {
-		[1] = 'DIK_ESCAPE',
-		[2] = 'DIK_1',
-		[3] = 'DIK_2',
-		[4] = 'DIK_3',
-		[5] = 'DIK_4',
-		[6] = 'DIK_5',
-		[7] = 'DIK_6',
-		[8] = 'DIK_7',
-		[9] = 'DIK_8',
-		[10] = 'DIK_9',
-		[11] = 'DIK_0',
-		[12] = 'DIK_MINUS',
-		[13] = 'DIK_EQUALS',
-		[14] = 'DIK_BACK',
-		[15] = 'DIK_TAB',
-		[16] = 'DIK_Q',
-		[17] = 'DIK_W',
-		[18] = 'DIK_E',
-		[19] = 'DIK_R',
-		[20] = 'DIK_T',
-		[21] = 'DIK_Y',
-		[22] = 'DIK_U',
-		[23] = 'DIK_I',
-		[24] = 'DIK_O',
-		[25] = 'DIK_P',
-		[26] = 'DIK_LBRACKET',
-		[27] = 'DIK_RBRACKET',
-		[28] = 'DIK_RETURN',
-		[29] = 'DIK_LCONTROL',
-		[30] = 'DIK_A',
-		[31] = 'DIK_S',
-		[32] = 'DIK_D',
-		[33] = 'DIK_F',
-		[34] = 'DIK_G',
-		[35] = 'DIK_H',
-		[36] = 'DIK_J',
-		[37] = 'DIK_K',
-		[38] = 'DIK_L',
-		[39] = 'DIK_SEMICOLON',
-		[40] = 'DIK_APOSTROPHE',
-		[41] = 'DIK_GRAVE',
-		[42] = 'DIK_LSHIFT',
-		[43] = 'DIK_BACKSLASH',
-		[44] = 'DIK_Z',
-		[45] = 'DIK_X',
-		[46] = 'DIK_C',
-		[47] = 'DIK_V',
-		[48] = 'DIK_B',
-		[49] = 'DIK_N',
-		[50] = 'DIK_M',
-		[51] = 'DIK_COMMA',
-		[52] = 'DIK_PERIOD',
-		[53] = 'DIK_SLASH',
-		[54] = 'DIK_RSHIFT',
-		[55] = 'DIK_MULTIPLY',
-		[56] = 'DIK_LMENU',
-		[57] = 'DIK_SPACE',
-		[58] = 'DIK_CAPITAL',
-		[59] = 'DIK_F1',
-		[60] = 'DIK_F2',
-		[61] = 'DIK_F3',
-		[62] = 'DIK_F4',
-		[63] = 'DIK_F5',
-		[64] = 'DIK_F6',
-		[65] = 'DIK_F7',
-		[66] = 'DIK_F8',
-		[67] = 'DIK_F9',
-		[68] = 'DIK_F10',
-		[69] = 'DIK_NUMLOCK',
-		[71] = 'DIK_NUMPAD7',
-		[72] = 'DIK_NUMPAD8',
-		[73] = 'DIK_NUMPAD9',
-		[74] = 'DIK_SUBTRACT',
-		[75] = 'DIK_NUMPAD4',
-		[76] = 'DIK_NUMPAD5',
-		[77] = 'DIK_NUMPAD6',
-		[78] = 'DIK_ADD',
-		[79] = 'DIK_NUMPAD1',
-		[80] = 'DIK_NUMPAD2',
-		[81] = 'DIK_NUMPAD3',
-		[82] = 'DIK_NUMPAD0',
-		[83] = 'DIK_DECIMAL',
-		[87] = 'DIK_F11',
-		[88] = 'DIK_F12',
-		[141] = 'DIK_NUMPADEQUALS',
-		[156] = 'DIK_NUMPADENTER',
-		[157] = 'DIK_RCONTROL',
-		[181] = 'DIK_DIVIDE',
-		[184] = 'DIK_RMENU',
-		[197] = 'DIK_PAUSE',
-		[199] = 'DIK_HOME',
-		[200] = 'DIK_UP',
-		[201] = 'DIK_PRIOR',
-		[203] = 'DIK_LEFT',
-		[205] = 'DIK_RIGHT',
-		[207] = 'DIK_END',
-		[208] = 'DIK_DOWN',
-		[209] = 'DIK_NEXT',
-		[210] = 'DIK_INSERT',
-		[211] = 'DIK_DELETE',
-	},
-	['BUTTON'] = {
-		[0] = 'JOY_ARROW_UP',
-		[1] = 'JOY_ARROW_DOWN',
-		[2] = 'JOY_ARROW_LEFT',
-		[3] = 'JOY_ARROW_RIGHT',
-		[4] = 'JOY_BACK',
-		[5] = 'JOY_START',
-		[6] = 'JOY_L3',
-		[7] = 'JOY_R3',
-		[8] = 'JOY_L1',
-		[9] = 'JOY_R1',
-		[10] = 'JOY_L2',
-		[11] = 'JOY_R2',
-		[12] = 'JOY_CROSS',
-		[13] = 'JOY_CIRCLE',
-		[14] = 'JOY_SQUARE',
-		[15] = 'JOY_TRIANGLE',
-	},
-}
-
 Joystick = {
 	[0] = {Pressed = {}, BeingPressed = {}, BeingReleased = {}},
 	[1] = {Pressed = {}, BeingPressed = {}, BeingReleased = {}},
@@ -884,9 +883,27 @@ Joystick = {
 	[3] = {Pressed = {}, BeingPressed = {}, BeingReleased = {}},
 }
 
-MainMenu = GetPersistentDataTable()
 
-if not next(MainMenu) then
+MainMenu = GetPersistentDataTable('MainMenu')
+
+-- A NOTE ABOUT PERSISTENT DATA:
+--[[
+	Future me might wonder why I wrote type(shared) ~= 'table' below. Here's why:
+	
+	DSL 10 introduced a new PersistentDataTable mechanism, saving data to a file called savedata.bin.
+	Previously, the function stored nothing, so every time we started the game, it reset to its default state.
+	
+	However, the issue arises when the game unexpectedly stops (e.g., crash or ALT + F4). In such cases, the
+	latest persistent data is used, causing the sub-menu to reflect the last selected state. This disrupts
+	the ButtonManagement event (see Interface.lua).
+	
+	In order to replicate the behavior of the old GetPersistentDataTable, the table must be in its default state
+	during init. While there are many ways to detect the init phase, checking type(shared) ~= 'table' is the simplest.
+	The shared table is only declared once the game boots.
+	
+	Deleting the data WILL NOT resolve the issue because both Init.lua and Main.lua rely on this script for communication.
+]]
+if not next(MainMenu) or type(shared) ~= 'table' then
 	MainMenu.Settings = GetPreference()
 	MainMenu.SaveData = IsFileTableAvaiable() and GetSaveDataOutlines() or {}
 	MainMenu.LastSave = GetLastSavedGame(true)
@@ -894,6 +911,9 @@ if not next(MainMenu) then
 	MainMenu.KeyTimer = GetSystemTimer()
 	MainMenu.IsAdjust = false
 	MainMenu.TextMenu = GetLocalization()
+	
+	MainMenu.MessageThread = nil
+	MainMenu.MessageQueue = {}
 	
 	MainMenu.ForceReset = false
 	MainMenu.ForceEntry = 0
@@ -935,6 +955,7 @@ if not next(MainMenu) then
 			{Text = GetLocalization('ANTIALIASING'), BackOpt = 1, CurrOpt = 1, List = {'1x MSAA', '2x MSAA', '4x MSAA', '8x MSAA'}, R = 255, G = 255, B = 255},
 			{Text = GetLocalization('VSYNC'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('ON')}, R = 255, G = 255, B = 255},
 			{Text = GetLocalization('SHADOWS'), BackOpt = 1, CurrOpt = 1, List = {GetLocalization('OFF'), GetLocalization('LOW'), GetLocalization('MEDIUM'), GetLocalization('HIGH')}, R = 255, G = 255, B = 255},
+			{Text = GetLocalization('LANGUAGE'), BackOpt = GetLanguageOption(), CurrOpt = GetLanguageOption(), List = {GetLocalization('DEFAULT'), GetLocalization('AMERICAN'), GetLocalization('FRENCH'), GetLocalization('GERMAN'), GetLocalization('ITALIAN'), GetLocalization('SPANISH'), GetLocalization('BRITISH'), GetLocalization('RUSSIAN'), GetLocalization('JAPANESE')}, R = 255, G = 255, B = 255},
 		},
 	}
 end
