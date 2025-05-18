@@ -3,15 +3,15 @@ Revitalizing the main menu of Bully: Scholarship Edition with a refreshing desig
 
 
 Features:
-- New UI Design.
+- New UI design.
 - New "Load" feature on the main menu.
-- Skip the unnecessary AttractMode.wmv.
-- Custom localization file.
+- New "New Game" feature on the main menu.
+- Custom localization / translation file.
 - Multi-aspect ratio for diverse monitors.
 
 
 Requirements:
-- Derpy's Script Loader 7 or greater (Full Version, not S).
+- Derpy's Script Loader 10 or greater (Full Version, not S).
 - Derpy's Script Loader SDK (_derpy_script_loader/extras/sdk).
 - VS 2015.
 
