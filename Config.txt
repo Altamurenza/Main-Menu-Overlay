@@ -1,2 +1,0 @@
-init_script Scripts/Init.lua
-main_script Scripts/Main.lua
