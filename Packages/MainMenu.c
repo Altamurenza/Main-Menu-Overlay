@@ -16,10 +16,7 @@ Author	: Altamurenza
 #pragma comment(lib, "windowscodecs")
 
 #pragma warning(disable: 4996)
-
-#define BIT_COUNT 32
 #define CLAMP(Value, Min, Max) (Value < Min ? Min : (Value > Max ? Max : Value))
-
 
 static VOID DSLConsole_Print(lua_State *L, LPCSTR Message, INT Type) {
 	LPCSTR Function[] = {
@@ -36,6 +33,7 @@ static VOID DSLConsole_Print(lua_State *L, LPCSTR Message, INT Type) {
 static INT DSLConsole_SystemError(lua_State *L, DWORD Code) {
 	LPSTR Description = NULL;
 
+
 	FormatMessageA(
 		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
 		NULL, Code == 0 ? GetLastError() : Code, 0, (LPSTR)&Description, 0, NULL
@@ -46,6 +44,16 @@ static INT DSLConsole_SystemError(lua_State *L, DWORD Code) {
 	return 0;
 }
 static BOOL GetSaveFilePath(lua_State *L, HANDLE *Token, PWSTR *User, WCHAR *Path) {
+	LPWSTR PortableSaves = L"Saves\\";
+	*Token = NULL;
+	*User = NULL;
+
+	DWORD Attrib = GetFileAttributesW(PortableSaves);
+	if ((Attrib != INVALID_FILE_ATTRIBUTES) && (Attrib & FILE_ATTRIBUTE_DIRECTORY)) {
+		wcscpy(Path, PortableSaves);
+		return TRUE;
+	}
+
 	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, Token))
 		return (BOOL)DSLConsole_SystemError(L, 0);
 
@@ -57,16 +65,19 @@ static BOOL GetSaveFilePath(lua_State *L, HANDLE *Token, PWSTR *User, WCHAR *Pat
 	return (BOOL)(Result == S_OK);
 }
 static VOID OpenSaveFile(lua_State *L, FILE **File, WCHAR *Name) {
-	HANDLE Token;
-	PWSTR User;
+	HANDLE Token = NULL;
+	PWSTR User = NULL;
 	WCHAR Path[MAX_PATH];
 
 	if (GetSaveFilePath(L, &Token, &User, Path)) {
 		swprintf(Path, MAX_PATH, L"%ls%ls", Path, Name);
 		*File = _wfopen(Path, L"rb");
 	}
-	CoTaskMemFree(User);
-	CloseHandle(Token);
+
+	if (User != NULL)
+		CoTaskMemFree(User);
+	if (Token != NULL)
+		CloseHandle(Token);
 }
 
 /* DISPLAY */
@@ -190,6 +201,49 @@ static INT IsGamepadButtonPressed(lua_State *L) {
 
 /* SAVEDATA */
 
+static INT GetSaveDataDate(lua_State *L) {
+	luaL_checktype(L, 1, LUA_TSTRING);
+
+	LPCSTR Input = lua_tostring(L, 1);
+	WCHAR Name[MAX_PATH];
+	mbstowcs(Name, Input, strlen(Input) + 1);
+
+	HANDLE Token = NULL;
+	PWSTR User = NULL;
+	WCHAR Path[MAX_PATH];
+
+	if (!GetSaveFilePath(L, &Token, &User, Path)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	swprintf(Path, MAX_PATH, L"%ls%ls", Path, Name);
+
+	FILETIME FT;
+	FILETIME LocalFT;
+	SYSTEMTIME ST;
+	HANDLE Handle = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (Handle == INVALID_HANDLE_VALUE) {
+		DSLConsole_SystemError(L, 0);
+		lua_pushnil(L);
+	}
+	else if (GetFileTime(Handle, NULL, NULL, &FT) && FileTimeToLocalFileTime(&FT, &LocalFT) && FileTimeToSystemTime(&LocalFT, &ST)) {
+		lua_pushfstring(L, "%d-%d-%d %d:%d:%d", ST.wYear, ST.wMonth, ST.wDay, ST.wHour, ST.wMinute, ST.wSecond);
+	}
+	else {
+		DSLConsole_SystemError(L, 0);
+		lua_pushnil(L);
+	}
+
+	if (Handle)
+		CloseHandle(Handle);
+	if (User != NULL)
+		CoTaskMemFree(User);
+	if (Token != NULL)
+		CloseHandle(Token);
+
+	return 1;
+}
 static INT GetSaveDataOutlines(lua_State *L) {
 	struct FTB {
 		INT Valid;
@@ -287,8 +341,8 @@ static INT IsSaveFileAvailable(lua_State *L) {
 static INT SetProxyFiles(lua_State *L) {
 	luaL_checktype(L, 1, LUA_TBOOLEAN);
 
-	HANDLE Token;
-	PWSTR User;
+	HANDLE Token = NULL;
+	PWSTR User = NULL;
 	WCHAR Path[MAX_PATH];
 	if (!GetSaveFilePath(L, &Token, &User, Path))
 		return 0;
@@ -326,23 +380,29 @@ static INT SetProxyFiles(lua_State *L) {
 			}
 		}
 
-		CoTaskMemFree(User);
-		CloseHandle(Token);
+		if (User != NULL)
+			CoTaskMemFree(User);
+		if (Token != NULL)
+			CloseHandle(Token);
 
 		lua_pushboolean(L, 1);
 		return 1;
 	}
 	if (Proxied) {
-		CoTaskMemFree(User);
-		CloseHandle(Token);
+		if (User != NULL)
+			CoTaskMemFree(User);
+		if (Token != NULL)
+			CloseHandle(Token);
 
 		lua_pushboolean(L, 1);
 		return 1;
 	}
 
 	if (lua_type(L, 2) != LUA_TNUMBER) {
-		CoTaskMemFree(User);
-		CloseHandle(Token);
+		if (User != NULL)
+			CoTaskMemFree(User);
+		if (Token != NULL)
+			CloseHandle(Token);
 		
 		luaL_argerror(L, 2, lua_pushfstring(L, "expected number, got %s", lua_typename(L, lua_type(L, 2))));
 		return 0;
@@ -354,8 +414,10 @@ static INT SetProxyFiles(lua_State *L) {
 	
 	FILE *TargetFile = _wfopen(TargetName, L"rb");
 	if (!TargetFile) {
-		CoTaskMemFree(User);
-		CloseHandle(Token);
+		if (User != NULL)
+			CoTaskMemFree(User);
+		if (Token != NULL)
+			CloseHandle(Token);
 		return 0;
 	}
 
@@ -386,8 +448,10 @@ static INT SetProxyFiles(lua_State *L) {
 	}
 	free(TargetData);
 
-	CoTaskMemFree(User);
-	CloseHandle(Token);
+	if (User != NULL)
+		CoTaskMemFree(User);
+	if (Token != NULL)
+		CloseHandle(Token);
 
 	lua_pushboolean(L, 1);
 	return 1;
@@ -396,60 +460,14 @@ static INT SetProxyFiles(lua_State *L) {
 
 /* MISCELLANEOUS */
 
-static BOOL ExportAsBMP(lua_State *L, HDC DC, HBITMAP BM, INT Width, INT Height, INT Size, LPCSTR Name) {
-	FILE *Output = fopen(Name, "wb");
-	if (!Output) {
-		DSLConsole_Print(L, lua_pushfstring(L, "failed to create %s", Name), 2);
-		return FALSE;
-	}
-
-	BITMAPINFOHEADER IH;
-	IH.biSize = sizeof(BITMAPINFOHEADER);
-	IH.biWidth = Width;
-	IH.biHeight = -Height; // positive value is bottom-up
-	IH.biPlanes = 1;
-	IH.biBitCount = BIT_COUNT;
-	IH.biCompression = BI_RGB;
-	IH.biSizeImage = Size;
-	IH.biXPelsPerMeter = 0;
-	IH.biYPelsPerMeter = 0;
-	IH.biClrUsed = 0;
-	IH.biClrImportant = 0;
-
-	BITMAPFILEHEADER FH;
-	FH.bfType = 0x4D42;
-	FH.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + Size;
-	FH.bfReserved1 = 0;
-	FH.bfReserved2 = 0;
-	FH.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-
-	// copy the captured bitmap to buffer and write the file
-	UINT CopiedLines;
-	BYTE *Bits = (BYTE*)malloc(Size);
-	if (Bits) {
-		CopiedLines = GetDIBits(DC, BM, 0, Height, Bits, (BITMAPINFO*)&IH, DIB_RGB_COLORS);
-		if (!CopiedLines)
-			DSLConsole_SystemError(L, 0);
-
-		fwrite(&FH, sizeof(BITMAPFILEHEADER), 1, Output); // write header
-		fwrite(&IH, sizeof(BITMAPINFOHEADER), 1, Output); // write file information
-		fwrite(Bits, 1, Size, Output); // write pixels
-		free(Bits);
-	}
-	else
-		DSLConsole_Print(L, "failed to allocate memory for Bits", 2);
-
-	fclose(Output);
-	return (!Bits || !CopiedLines) ? FALSE : TRUE;
-}
-static BOOL ExportAsPNG(lua_State *L, HDC DC, HBITMAP BM, INT Width, INT Height, INT Size, LPCSTR Name) {
+BOOL EncodePNG(lua_State *L, HDC DC, HBITMAP BM, INT Width, INT Height, INT Size) {
 	BITMAPINFO BI;
 	ZeroMemory(&BI, sizeof(BI));
 	BI.bmiHeader.biSize = sizeof(BI.bmiHeader);
 	BI.bmiHeader.biWidth = Width;
 	BI.bmiHeader.biHeight = -Height; // positive value is bottom-up
 	BI.bmiHeader.biPlanes = 1;
-	BI.bmiHeader.biBitCount = BIT_COUNT;
+	BI.bmiHeader.biBitCount = 32;
 	BI.bmiHeader.biCompression = BI_RGB;
 
 	// copy the captured bitmap to buffer
@@ -464,75 +482,66 @@ static BOOL ExportAsPNG(lua_State *L, HDC DC, HBITMAP BM, INT Width, INT Height,
 		return FALSE;
 	}
 
-	// reformat the image colors from BGR to RGBA (or RGB if 24 bit)
-	for (INT Index = 0; Index < Size; Index += (BIT_COUNT == 32 ? 4 : 3)) {
+	// reformat the image colors from BGR to RGBA
+	for (INT Index = 0; Index < Size; Index += 4) {
 		BYTE Blue = Bits[Index];
 		Bits[Index] = Bits[Index + 2]; // swap blue to red
 		Bits[Index + 2] = Blue; // swap red to blue
-
-		if (BIT_COUNT == 32)
-			Bits[Index + 3] = 255; // set alpha
+		Bits[Index + 3] = 255; // set alpha
 	}
 
-	// encode and write the file
+	// encode
 	UINT Code;
-	if (BIT_COUNT == 32)
-		Code = lodepng_encode32_file(Name, Bits, Width, Height);
-	else
-		Code = lodepng_encode24_file(Name, Bits, Width, Height);
+	BYTE *PNG_Data = NULL;
+	size_t PNG_Size = 0;
 
-	if (Code)
+	Code = lodepng_encode32(&PNG_Data, &PNG_Size, Bits, Width, Height);
+	if (Code) {
 		DSLConsole_Print(L, lodepng_error_text(Code), 2);
+		lua_pushnil(L);
+	}
+	else {
+		lua_pushlstring(L, (LPCSTR)PNG_Data, PNG_Size);
+	}
+
 	free(Bits);
+	free(PNG_Data);
+
 	return Code ? FALSE : TRUE;
 }
-static INT CaptureScreen(lua_State *L) {
-	luaL_checktype(L, 1, LUA_TSTRING);
-	if (BIT_COUNT != 32 && BIT_COUNT != 24) {
-		DSLConsole_Print(L, "unsupported BIT_COUNT (must be 32 or 24 bit)", 1);
-		return 0;
-	}
-
-	LPCSTR Name = lua_tostring(L, 1);
-	LPSTR Extension = strrchr(Name, '.');
-	if (!Extension || (strcmp(Extension, ".bmp") != 0 && strcmp(Extension, ".png") != 0)) {
-		DSLConsole_Print(L, "file extension must be .bmp or .png", 1);
-		return 0;
-	}
-
+static INT CapturePNG(lua_State *L) {
 	HWND Window = GetActiveWindow();
 	RECT Rectangle;
 	if (!Window || !GetClientRect(Window, &Rectangle))
 		return DSLConsole_SystemError(L, 0);
+
 	INT WindowW = Rectangle.right - Rectangle.left;
 	INT WindowH = Rectangle.bottom - Rectangle.top;
-	INT ImageW = lua_type(L, 2) != LUA_TNUMBER ? WindowW : (INT)lua_tonumber(L, 2);
-	INT ImageH = lua_type(L, 3) != LUA_TNUMBER ? WindowH : (INT)lua_tonumber(L, 3);
-	INT SurfaceStride = ((ImageW * BIT_COUNT + 31) & ~31) / 8;
-	INT ImageSize = SurfaceStride * ImageH;
+
+	// Calculate center coordinates and dimensions for a square crop
+	INT SideLength = min(WindowW, WindowH); // Ensure 1x1 aspect ratio
+	INT SourceX = (WindowW - SideLength) / 2;
+	INT SourceY = (WindowH - SideLength) / 2;
+
+	INT TargetW = 512;
+	INT TargetH = 512;
+	INT SurfaceStride = ((SideLength * 32 + 31) & ~31) / 8;
+	INT ImageSize = SurfaceStride * SideLength;
 
 	HDC ScreenDC = GetDC(Window);
 	HDC MemoryDC = CreateCompatibleDC(ScreenDC);
-	HBITMAP MemoryBM = CreateCompatibleBitmap(ScreenDC, ImageW, ImageH);
+	HBITMAP MemoryBM = CreateCompatibleBitmap(ScreenDC, TargetW, TargetH);
 	HBITMAP ReplacedObj = (HBITMAP)SelectObject(MemoryDC, MemoryBM);
 
-	BOOL Dithering = lua_type(L, 4) != LUA_TBOOLEAN ? TRUE : (BOOL)lua_toboolean(L, 4);
-	if (!Dithering)
-		SetStretchBltMode(MemoryDC, COLORONCOLOR);
-	else {
-		SetStretchBltMode(MemoryDC, HALFTONE);
-		POINT BrushOrigin = { 0, 0 };
-		SetBrushOrgEx(MemoryDC, BrushOrigin.x, BrushOrigin.y, NULL);
-	}
+	SetStretchBltMode(MemoryDC, HALFTONE);
+	POINT BrushOrigin = { 0, 0 };
+	SetBrushOrgEx(MemoryDC, BrushOrigin.x, BrushOrigin.y, NULL);
 
-	BOOL Result = FALSE;
-	if (!StretchBlt(MemoryDC, 0, 0, ImageW, ImageH, ScreenDC, 0, 0, WindowW, WindowH, SRCCOPY))
+	BOOL Success = FALSE;
+	if (!StretchBlt(MemoryDC, 0, 0, TargetW, TargetH, ScreenDC, SourceX, SourceY, SideLength, SideLength, SRCCOPY))
 		DSLConsole_SystemError(L, 0);
 	else {
-		if (strcmp(Extension, ".bmp") == 0)
-			Result = ExportAsBMP(L, ScreenDC, MemoryBM, ImageW, ImageH, ImageSize, Name);
-		else
-			Result = ExportAsPNG(L, ScreenDC, MemoryBM, ImageW, ImageH, ImageSize, Name);
+		Success = EncodePNG(L, ScreenDC, MemoryBM, TargetW, TargetH, ImageSize);
 	}
 
 	SelectObject(MemoryDC, ReplacedObj);
@@ -540,7 +549,6 @@ static INT CaptureScreen(lua_State *L) {
 	DeleteDC(MemoryDC);
 	ReleaseDC(NULL, ScreenDC);
 
-	lua_pushboolean(L, Result);
 	return 1;
 }
 static INT RunCFunction(lua_State *L) {
@@ -567,11 +575,12 @@ __declspec(dllexport) INT MainMenu(lua_State *L) {
 	lua_register(L, "GetDisplayValues", &GetDisplayValues);
 	lua_register(L, "GetDisplayModes", &GetDisplayModes);
 	lua_register(L, "IsGamepadButtonPressed", &IsGamepadButtonPressed);
+	lua_register(L, "GetSaveDataDate", &GetSaveDataDate);
 	lua_register(L, "GetSaveDataOutlines", &GetSaveDataOutlines);
 	lua_register(L, "GetSaveLastID", &GetSaveLastID);
 	lua_register(L, "IsSaveFileAvailable", &IsSaveFileAvailable);
 	lua_register(L, "SetProxyFiles", &SetProxyFiles);
-	lua_register(L, "CaptureScreen", &CaptureScreen);
+	lua_register(L, "CapturePNG", &CapturePNG);
 	lua_register(L, "RunCFunction", &RunCFunction);
 
 	return 0;
