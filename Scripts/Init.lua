@@ -28,8 +28,3 @@ CallScript = nil
 -- # START #
 
 CreateDrawingThread(ScreenManagement)
-
-
--- # START #
-
-CreateDrawingThread(ScreenManagement)
