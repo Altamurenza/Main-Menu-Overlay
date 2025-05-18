@@ -5,6 +5,27 @@
 -- # CONTROL #
 
 ButtonManagement = function()
+	-- A NOTE ABOUT BUTTON MANAGEMENT:
+	--[[
+		This function is responsible for managing all button interactions in the main menu,
+		ensuring that every movement follows a strict control mechanism.
+		
+		Since this mod overlays the actual main menu, any unintended behavior could disrupt
+		the correct order of menu navigation.
+		
+		For example, if a new menu is added that does not exist in the original main menu, 
+		the options may become misaligned with their expected actions. As a result, selecting 
+		an option could trigger an unexpected response.
+		
+		To prevent such issues, the 'IsNativeOption' function verifies whether an option
+		belongs to the native main menu (the original menu, not introduced by this mod).
+		If the next option is known to be non-native, all buttons are disabled to maintain
+		the original menu in place while allowing the overlay menu to function as intended.
+		
+		The code below may appear tangled, but keeping all logic in one place helps to understand
+		the flow of execution.
+	]]
+	
 	if not IsConsoleActive() and not GetSaveLoad() then
 		local Layer = GetLayer()
 		
@@ -23,7 +44,12 @@ ButtonManagement = function()
 				RunCFunction('0x5D3E60', 'NavUp')
 				DisableController()
 			elseif Layer == 'Settings' and not IsConfiguring() then
-				SetKeyPress(1) -- 1 is prev in the Settings menu
+				if not IsNativeOption(GetLayerIndexValue(Layer, GetLayerLID(Layer), 'Text')) then
+					RunCFunction('0x5D3E60', 'NavUp')
+					DisableController()
+				else
+					SetKeyPress(1) -- 1 is prev in the Settings menu
+				end
 			else
 				DisableController()
 			end
@@ -40,21 +66,36 @@ ButtonManagement = function()
 				RunCFunction('0x5D3E60', 'NavDwn')
 				DisableController()
 			elseif Layer == 'Settings' and not IsConfiguring() then
-				SetKeyPress(0) -- 0 is next in the Settings menu
+				if not IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')) then
+					RunCFunction('0x5D3E60', 'NavDwn')
+					DisableController()
+				else
+					SetKeyPress(0) -- 0 is next in the Settings menu
+				end
 			else
 				DisableController()
 			end
 		elseif GetKeyPress('Left') then
 			if Layer == 'Settings' and IsConfiguring() then
 				SetSettingOption(GetLayerCID(Layer), nil, false)
-				SetKeyPress(0)
+				if IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')) then
+					SetKeyPress(0)
+				else
+					RunCFunction('0x5D3E60', 'NavUp')
+					DisableController()
+				end
 			else
 				DisableController()
 			end
 		elseif GetKeyPress('Right') then
 			if Layer == 'Settings' and IsConfiguring() then
 				SetSettingOption(GetLayerCID(Layer), nil, true)
-				SetKeyPress(1)
+				if IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')) then
+					SetKeyPress(1)
+				else
+					RunCFunction('0x5D3E60', 'NavDwn')
+					DisableController()
+				end
 			else
 				DisableController()
 			end
@@ -67,7 +108,11 @@ ButtonManagement = function()
 				local CID = GetLayerCID(Layer)
 				SetSettingOption(CID, GetSettingOption(CID))
 				SetConfigure(false)
-				SetKeyPress(8)
+				if IsNativeOption(GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')) then
+					SetKeyPress(8)
+				else
+					DisableController()
+				end
 			elseif Layer == 'Load' or (Layer == 'Settings' and not IsConfiguring()) then
 				SetLayerCID(Layer, Layer == 'Load' and GetLayerCID(Layer) or 1)
 				SetLayer(Layer == 'Load' and 'Story' or 'Main')
@@ -134,13 +179,25 @@ ButtonManagement = function()
 				RunCFunction('0x5D3E60', 'ButtonUp')
 				DisableController()
 			elseif Layer == 'Settings' then
+				local Title = GetLayerIndexValue(Layer, GetLayerCID(Layer), 'Text')
 				if IsConfiguring() then
+					local LID = GetLayerLID(Layer)
 					local CID = GetLayerCID(Layer)
 					SetSettingOption(CID, Select(2, GetSettingOption(CID)))
 					RunCFunction('0x5D3E60', 'ButtonUp')
+					if Title == GetLocalization('LANGUAGE') then
+						SetPreference(Select(2, GetSettingOption(CID)) - 2)
+					end
+					if LID ~= CID and (Title == GetLocalization('SHADOWS') or Title == GetLocalization('LANGUAGE')) then
+						SetQueuedMessage('RESTART_NOTE', 3.5)
+					end
 				end
 				SetConfigure(not IsConfiguring())
-				SetKeyPress(7)
+				if IsNativeOption(Title) then
+					SetKeyPress(7)
+				else
+					DisableController()
+				end
 			else
 				DisableController()
 			end
@@ -215,15 +272,23 @@ UpdateMenuComponent = function(TUD, TAR, Layout)
 	end
 end
 UpdateMenuInput = function(TUD, TAR)
-	-- detect keyboard or joystick
-	SetNavigationInput(GetNavigationInput())
-	if GetNavigationInput('Joystick') then
-		CreateSystemThread(JoystickListener, 0)
+	-- a patch for "utility/texture" package
+	if type(GetLanguage) ~= 'function' then
+		_G.GetLanguage = function()
+			return RunCFunction('0x5D5C10')
+		end
 	end
 	
-	-- create button texture
-	TUD.Select, TAR.Select = CreateInputTexture('Select')
-	TUD.Return, TAR.Return = CreateInputTexture('Return')
+	-- set input map
+	SetNavigationInput(GetNavigationInput())
+	if GetNavigationInput('Joystick') then
+		TUD.Select, TAR.Select = GetInputTexture(7, 0)
+		TUD.Return, TAR.Return = GetInputTexture(8, 0)
+		CreateSystemThread(JoystickListener, 0)
+	else
+		TUD.Select, TAR.Select = GetKeyboardTexture(GetKeyCode(GetNavigationInput('Select')[1]))
+		TUD.Return, TAR.Return = GetKeyboardTexture(GetKeyCode(GetNavigationInput('Return')[1]))
+	end
 end
 
 HalveText = function(Text, Width, Max)
@@ -237,6 +302,24 @@ HalveText = function(Text, Width, Max)
 	end
 	return string.sub(Text, 1, Point - 1)..'\n'..string.sub(Text, Point + 1, string.len(Text))
 end
+JustifyTextInline = function(Text, Scale, Font, Style, Max)
+	local Words, Lines, Line = {}, {}, ''
+	string.gsub(Text, '%S+', function(Word) table.insert(Words, Word) end)
+	
+	for I = 1, table.getn(Words) do
+		local TestLine = (Line == '' and Words[I] or Line..' '..Words[I])
+		if MeasureTextInline('~scale+font~'..TestLine, Scale, Font, 0, Style) > Max then
+			table.insert(Lines, Line)
+			Line = Words[I]
+		else
+			Line = TestLine
+		end
+	end
+	
+	if Line ~= '' then table.insert(Lines, Line) end -- last word
+	return table.concat(Lines, '\n'), table.getn(Lines)
+end
+
 DrawButton = function(L_Texture, R_Texture, L_Description, R_Description, Middle)
 	local X = Middle and 0.5 or GetFixedWidth(0.1)
 	local Y = 0.9
@@ -249,7 +332,7 @@ DrawButton = function(L_Texture, R_Texture, L_Description, R_Description, Middle
 	local Width, Height = MeasureTextInline(unpack(L_Text))
 	local L_Size = Height * GetTextureDisplayAspectRatio(L_Texture)
 	L_Text[2] = X + (Middle and (
-		type(R_Texture) == 'userdata' and -(0.04 + GetFixedWidth(Width)) or GetFixedWidth(L_Size)
+		type(R_Texture) == 'userdata' and -(0.04 + GetFixedWidth(Width)) or -GetFixedWidth(L_Size)
 	) or L_Size)
 	
 	DrawTexture(L_Texture, Middle and L_Text[2] - L_Size or X, Y, L_Size, Height)
@@ -264,6 +347,49 @@ DrawButton = function(L_Texture, R_Texture, L_Description, R_Description, Middle
 		DrawTexture(R_Texture, Middle and R_Text[2] - R_Size or L_Text[2] + 0.08, Y, R_Size, Height)
 		DrawTextInline(unpack(R_Text))
 	end
+end
+DrawMessage = function(TUD, TAR, Message, Second)
+	local AR = GetDisplayAspectRatio()
+	local Font = GetPreference('Font1')
+	local Scale = GetPreference('LayoutBotScale')
+	local Space = 0.01
+	local PadWidth = GetFixedWidth(0.75 * Scale, TAR.Ebox)
+	local Text, Lines = JustifyTextInline(GetLocalization(Message), Scale, Font, 3, PadWidth - 0.02)
+	local PadHeight = GetFixedWidth(0.15 * Lines * Scale, TAR.Ebox)
+	
+	local Status = true
+	local Factor = 0.1
+	local InX = 1 - PadWidth / 2 - Space / AR
+	local InY = 0 + PadHeight / 2 + Space
+	local OutX = 1 + PadWidth / 2 + Space / AR
+	local OutY = InY
+	local X, Y = OutX, OutY
+	
+	RunCFunction('0x5D3E60', 'Erand')
+	repeat
+		if type(Status) == 'number' and X == InX and Status < GetSystemTimer() then
+			Status = false
+		end
+		
+		if type(Status) == 'boolean' then
+			local DestX = Status and InX or OutX
+			local DestY = Status and InY or OutY
+			X = X + (DestX - X) * Factor
+			Y = Y + (DestY - Y) * Factor
+			
+			if math.abs(X - DestX) < 0.001 and math.abs(Y - DestY) < 0.001 then
+				X, Y = DestX, DestY
+				Status = GetSystemTimer() + (X == InX and Second * 1000 or 250)
+			end
+		end
+		
+		DrawTexture2(TUD.Ebox, X, Y, PadWidth, PadHeight, 0, 25, 25, 25, 125)
+		DrawTextInline('~xy+scale+font+white~'..Text, X - PadWidth / 2 + Space, Y - PadHeight / 3, Scale, Font, 0, 3)
+		
+		Wait(0)
+	until type(Status) == 'number' and X == OutX and Status < GetSystemTimer()
+	table.remove(MainMenu.MessageQueue, 1)
+	MainMenu.MessageThread = nil
 end
 DrawMain = function(TUD, TAR, Layout, Layer)
 	if GetPreference('ShowImage') >= 0 and GetLastAspectRatio() >= 1.4 and TUD.Image then
@@ -419,13 +545,15 @@ ScreenManagement = function()
 	UpdateMenuTable()
 	UpdateMenuInput(TUD, TAR)
 	
+	RunCFunction('0x5D3830')
+	
 	local LayerInput = RegisterLocalEventHandler('ControllersUpdated', ButtonManagement)
 	local LayerFunction = {
 		['Main'] = DrawMain, ['Story'] = DrawMain,
 		['Load'] = DrawLoad, ['Settings'] = DrawSettings,
 	}
 	while true do
-		if type(shared) == 'table' and HasStoryModeBeenSelected() then
+		if type(shared) == 'table' and RunCFunction('0x5D53E0') then
 			break
 		end
 		
@@ -435,8 +563,12 @@ ScreenManagement = function()
 		end
 		
 		-- ui
-		DrawTexture2(TUD.Background, 0.5, 0.5, 1 * TAR.Background, 1, 0)
+		DrawTexture2(TUD.Background, 0.5, 0.5, 1, 1, 0)
 		LayerFunction[GetLayer()](TUD, TAR, Layout, GetLayer())
+		
+		if IsMessageQueuing() then
+			ShowQueuedMessage(DrawMessage, TUD, TAR, GetQueuedMessage(1))
+		end
 		
 		Wait(0)
 	end
