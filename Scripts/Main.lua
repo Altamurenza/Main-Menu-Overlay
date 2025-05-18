@@ -22,10 +22,6 @@ end
 
 CallScript('Scripts/Library.lua')
 CallScript('Scripts/Interface.lua')
-CallScript = nil
-
-
--- # START #
 
 HookFunction('SystemAllowMissionManagerToForceRunMissions', function()
 	if IsForceReset() then
@@ -33,18 +29,24 @@ HookFunction('SystemAllowMissionManagerToForceRunMissions', function()
 	end
 end)
 
+
+-- # START #
+
 CreateDrawingThread(function()
 	while true do
 		if GetSaveLoad() then
 			SetSaveLoad(nil)
 		end
-		if type(shared) == 'table' and not HasStoryModeBeenSelected() then
+		
+		-- UpdateSaveData()
+		
+		if type(shared) == 'table' and not RunCFunction('0x5D53E0') then
 			ScreenManagement()
 		end
-		
 		if IsForceReset() then
 			DrawRectangle(0, 0, 1, 1, 0, 0, 0)
 		end
+		
 		Wait(0)
 	end
 end)
